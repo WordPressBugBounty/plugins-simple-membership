@@ -1,40 +1,43 @@
 <?php
 
-include_once('class.swpm-utils-misc.php');
-include_once('class.swpm-utils.php');
-include_once('class.swpm-utils-member.php');
-include_once('class.swpm-utils-membership-level.php');
-include_once('class.swpm-utils-template.php');
-include_once('class.swpm-init-time-tasks.php');
-include_once('class.swpm-wp-loaded-tasks.php');
-include_once('class.swpm-self-action-handler.php');
-include_once('class.swpm-comment-form-related.php');
-include_once('class.swpm-settings.php');
-include_once('class.swpm-protection.php');
-include_once('class.swpm-permission.php');
-include_once('class.swpm-auth.php');
-include_once('class.swpm-access-control.php');
-include_once('class.swpm-form.php');
-include_once('class.swpm-transfer.php');
-include_once('class.swpm-front-form.php');
-include_once('class.swpm-level-form.php');
-include_once('class.swpm-membership-levels.php');
-include_once('class.swpm-log.php');
-include_once('class.swpm-messages.php');
-include_once('class.swpm-ajax.php');
-include_once('class.swpm-registration.php');
-include_once('class.swpm-front-registration.php');
-include_once('class.swpm-admin-registration.php');
-include_once('class.swpm-membership-level.php');
-include_once('class.swpm-membership-level-custom.php');
-include_once('class.swpm-permission-collection.php');
-include_once('class.swpm-auth-permission-collection.php');
-include_once('class.swpm-transactions.php');
-include_once('shortcode-related/class.swpm-shortcodes-handler.php');
-include_once('class.swpm-utils-subscription.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-utils-misc.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-utils.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-utils-member.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-utils-membership-level.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-utils-template.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-init-time-tasks.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-wp-loaded-tasks.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-self-action-handler.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-comment-form-related.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-settings.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-protection.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-permission.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-auth.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-access-control.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-form.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-transfer.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-front-form.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-level-form.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-membership-levels.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-log.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-messages.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-ajax.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-registration.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-front-registration.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-admin-registration.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-membership-level.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-membership-level-custom.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-permission-collection.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-auth-permission-collection.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-transactions.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/shortcode-related/class.swpm-shortcodes-handler.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-utils-subscription.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-block.php' );
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-members-meta.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-cronjob.php' );
 include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'ipn/swpm_handle_subsc_ipn.php' );
 include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'lib/paypal/class-swpm-paypal-main.php' );
-include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-block.php' );
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-limit-active-login.php');
 
 class SimpleWpMembership {
 
@@ -45,6 +48,7 @@ class SimpleWpMembership {
 
         new SwpmShortcodesHandler(); //Tackle the shortcode definitions and implementation.
         new SwpmSelfActionHandler(); //Tackle the self action hook handling.
+	    new SwpmLimitActiveLogin(); // Tackle login limit functionalities.
 
         add_action('admin_menu', array(&$this, 'menu'));
         add_action('init', array(&$this, 'init_hook'));
@@ -74,8 +78,8 @@ class SimpleWpMembership {
         add_action('load-wp-membership_page_simple_wp_membership_levels', array(&$this, 'admin_library'));
 
         //Core WP hooks that we need to hook into
-        add_action('wp_login', array(&$this, 'wp_login_hook_handler'), 10, 2);
-        add_action('wp_authenticate', array(&$this, 'wp_authenticate_handler'), 1, 2);
+        add_action('wp_authenticate', array(&$this, 'wp_authenticate_handler'), 1, 2);//This hook is triggered before WordPress authenticates the user. Useful for pre-authentication tasks.
+        add_action('wp_login', array(&$this, 'wp_login_hook_handler'), 10, 2);//This hook is triggered after WordPress authenticates a user. It passes the user's username and user object (of the authenticated user).
         add_action('wp_logout', array(&$this, 'wp_logout_handler'));
         add_action('password_reset', array(&$this, 'wp_password_reset_hook'), 10, 2);
         add_action('user_register', array(&$this, 'swpm_handle_wp_user_registration'));
@@ -290,31 +294,38 @@ class SimpleWpMembership {
     }
 
     public static function handle_after_login_authentication($username, $pass, $rememberme = true) {
-        //This function is called after authentication is successful in SWPM.
-        //This function should only handle/execute when the loign originates from our plugin's login form.
+        //This function is called after the authentication is successful in SWPM.
+        //Note: This function should ONLY be executed/handled by us when the login originates from our plugin's login form.
 
-        if(isset($_REQUEST['wp-submit'])){
-            //This is a WP login form submission. 
-            //Just return from here since this function's wp_signon call is only needed when the login request originates from our plugin's login form.
-            //WP will handle the full login operation and post-login redirection.
-            SwpmLog::log_auth_debug("The wp-submit query parameter is set. This login action originated from WP login form submission. WP will handle the main login operation and any post login redirection.", true);
-            //Trigger a separate hook for WP login form submission.
-            do_action('swpm_after_login_authentication_wp_login_form');
+        //Check if the login request originated from our plugin's login form.
+        if ( !isset($_REQUEST['swpm_user_name']) ) {
+            //This is not a login request from our plugin's login form. 
+            //Our plugin's login request (Standard login, login after registration, 2FA login, etc.) should have the 'swpm_user_name' parameter.
+            //We have also added 'swpm_login_origination_flag' parameter to all our logins to identify the login request origination.
+
+            //Return from here since WP or the other plugin will handle the full login operation and post-login redirection.
+            SwpmLog::log_auth_debug("The 'swpm_user_name' query parameter is not set. This login action didn't originate from our plugin's login form.", true);
+            SwpmLog::log_auth_debug("Exiting this function to skip wp_signon and after_login_redirection since the login was initiated by WP or another plugin.", true);
+            //Trigger an action hook for this scenario.
+            do_action('swpm_after_login_authentication_external_login_action');
             return;
         }
 
+        //Check if the login request is for a user that is already logged in.
         if (is_user_logged_in()) {
             $current_user = wp_get_current_user();
             SwpmLog::log_auth_debug("Static function handle_after_login_authentication(). User is logged in. WP Username: " . $current_user->user_login, true);
             if ($current_user->user_login == $username) {
+                //The user is already logged in. Nothing to do.
                 return;
             }
         }
         SwpmLog::log_auth_debug("Trying wp_signon() with username: " . $username, true);
 
-        add_filter('wordfence_ls_require_captcha', '__return_false');//For Wordfence plugin's captcha compatibility
+        //For Wordfence plugin's captcha compatibility.
+        add_filter('wordfence_ls_require_captcha', '__return_false');
 
-        //Try to login the user into WP user system.
+        //Try to log-in the user into the WP user system.
         $user_obj = wp_signon(array('user_login' => $username, 'user_password' => $pass, 'remember' => $rememberme), is_ssl());
         if ($user_obj instanceof WP_User) {
             wp_set_current_user($user_obj->ID, $user_obj->user_login);
@@ -347,7 +358,7 @@ class SimpleWpMembership {
         SwpmLog::log_auth_debug("Triggering swpm_after_login hook.", true);
         do_action('swpm_after_login');//This hook is triggered when login originates from our plugin's login form.
 
-        if (!SwpmUtils::is_ajax()) {
+        if ( !SwpmUtils::is_ajax() ) {
             //Redirection after login to make sure the page loads with all the correct variables set everywhere.
 
             //Check if "redirect_to" parameter is set. If so, use that URL.
@@ -409,8 +420,12 @@ class SimpleWpMembership {
         $auth->login_to_swpm_using_wp_user($user);
     }
 
-    /* Used to log the user into SWPM system using the wp_login hook. Some social plugins use this hook to handle the login */
+    /* 
+    * Used to log the user into SWPM system using the wp_login hook. Some social plugins use this hook to handle the login.
+    */
     public function wp_login_hook_handler($user_login, $user){
+        //This hook is triggered after WordPress authenticates a user. 
+        //It passes the user's username and user object (of the authenticated user).        
         SwpmLog::log_auth_debug('wp_login hook triggered. Username: ' . $user_login, true);
         $auth = SwpmAuth::get_instance();
         if ($auth->is_logged_in()) {
@@ -420,7 +435,12 @@ class SimpleWpMembership {
         $auth->login_to_swpm_using_wp_user($user);
     }
 
+    /*
+    * We can use this function to do any pre-authentication tasks.
+    * This function is triggered before WordPress authenticates the user.
+    */
     public function wp_authenticate_handler($username, $password) {
+        //This hook is triggered before WordPress authenticates the user. Useful for pre-authentication tasks.
 
         $auth = SwpmAuth::get_instance();
         if (($auth->is_logged_in() && ($auth->userData->user_name == $username))) {
@@ -1151,10 +1171,13 @@ class SimpleWpMembership {
     }
 
     public static function activate() {
-        //Schedule the cron event for account status and expiry checks. This cron event is also used by the ENB extension.
+        //Schedule the cron job events.
+        //We use the daily cronjob events for account status and expiry checks. This cron event is also used by the ENB extension.
         wp_schedule_event(time(), 'daily', 'swpm_account_status_event');
         //Schedule the pending account deletion cron event.
         wp_schedule_event(time(), 'daily', 'swpm_delete_pending_account_event');
+
+        wp_schedule_event(time(), 'twicedaily', 'swpm_twicedaily_cron_event');
 
         //Run the standard installer steps
         include_once('class.swpm-installation.php');

@@ -987,7 +987,42 @@ class SwpmSettings {
 				'message' => SwpmUtils::_( 'Enter the URL of your privacy policy page.' ),
 			)
 		);
+
+		//Terms and conditions section
+		add_settings_section( 'limit-active-logins', __( 'Active Login Limit', 'simple-membership' ), array( &$this, 'advanced_settings_limit_active_logins_callback' ), 'simple_wp_membership_settings' );
+		add_settings_field(
+			'enable-login-limiter',
+			__( 'Enable Login Limit', 'simple-membership' ),
+			array( &$this, 'checkbox_callback' ),
+			'simple_wp_membership_settings',
+			'limit-active-logins',
+			array(
+				'item'    => 'enable-login-limiter',
+				'message' => __( 'Check this box to enable the login limit feature.', 'simple-membership'),
+			)
+		);
+		add_settings_field(
+			'maximum-active-logins',
+			__( 'Maximum Active Logins', 'simple-membership' ),
+			array( &$this, 'maximum_active_login_callback' ),
+			'simple_wp_membership_settings',
+			'limit-active-logins',
+            array(
+				'item'    => 'maximum-active-logins',
+			)
+		);
+        //		add_settings_field(
+        //			'login-logic',
+        //            __( 'Login Logic', 'simple-membership' ),
+        //			array( &$this, 'login_logic_callback' ),
+        //			'simple_wp_membership_settings',
+        //			'limit-active-logins',
+        //            array(
+        //				'item'    => 'login-logic',
+        //			)
+        //		);
 	}
+
 
 	private function tab_6() {
 		//Register settings sections and fields for the blacklisting and whitelisting settings tab.
@@ -1122,7 +1157,7 @@ class SwpmSettings {
 			echo '<option ' . $is_selected . ' value="' . esc_attr( $key ) . '">' . esc_attr( $value ) . '</option>';
 		}
 		echo '</select>';
-		echo '<br/><i>' . $msg . '</i>';
+		echo '<p class="description">' . $msg . '</p>';
 	}
 
 	public function checkbox_callback( $args ) {
@@ -1130,7 +1165,7 @@ class SwpmSettings {
 		$msg  = isset( $args['message'] ) ? $args['message'] : '';
 		$is   = esc_attr( $this->get_value( $item ) );
 		echo "<input type='checkbox' $is name='swpm-settings[" . $item . "]' value=\"checked='checked'\" />";
-		echo '<br/><i>' . $msg . '</i>';
+		echo '<p class="description">' . $msg . '</p>';
 	}
 
 	public function textarea_callback( $args ) {
@@ -1138,7 +1173,7 @@ class SwpmSettings {
 		$msg  = isset( $args['message'] ) ? $args['message'] : '';
 		$text = esc_attr( $this->get_value( $item ) );
 		echo "<textarea name='swpm-settings[" . $item . "]'  rows='6' cols='60' >" . $text . '</textarea>';
-		echo '<br/><i>' . $msg . '</i>';
+		echo '<p class="description">' . $msg . '</p>';
 	}
 
 	public function textfield_small_callback( $args ) {
@@ -1146,7 +1181,7 @@ class SwpmSettings {
 		$msg  = isset( $args['message'] ) ? $args['message'] : '';
 		$text = esc_attr( $this->get_value( $item ) );
 		echo "<input type='text' name='swpm-settings[" . $item . "]'  size='5' value='" . $text . "' />";
-		echo '<br/><i>' . $msg . '</i>';
+		echo '<p class="description">' . $msg . '</p>';
 	}
 
 	public function textfield_callback( $args ) {
@@ -1162,7 +1197,7 @@ class SwpmSettings {
 		$msg  = isset( $args['message'] ) ? $args['message'] : '';
 		$text = esc_attr( $this->get_value( $item ) );
 		echo "<input type='text' name='swpm-settings[" . $item . "]'  size='100' value='" . $text . "' />";
-		echo '<br/><i>' . $msg . '</i>';
+		echo '<p class="description">' . $msg . '</p>';
 	}
 
 	public function set_default_editor( $r ) {
@@ -1347,7 +1382,32 @@ class SwpmSettings {
 
 	public function advanced_settings_terms_and_conditions_callback() {
 		_e( 'This section allows you to configure terms and conditions and privacy policy that users must accept at registration time.', 'simple-membership' );
+		echo ' <a href="https://simple-membership-plugin.com/adding-a-terms-and-conditions-and-privacy-policy-to-member-registration-page/" target="_blank">' . __('Read this documentation', 'simple-membership') . '</a>' . __(' to learn more.', 'simple-membership');
 	}
+
+	public function advanced_settings_limit_active_logins_callback() {
+		_e( 'This section lets you set login limits for your members.', 'simple-membership' );
+		echo ' <a href="https://simple-membership-plugin.com/configuring-active-login-limit/" target="_blank">' . __('Read this documentation', 'simple-membership') . '</a>' . __(' to learn more.', 'simple-membership');
+	}
+
+	public function maximum_active_login_callback( $args ) {
+		// Get settings value.
+		$item = $args['item'];
+		$value = $this->get_value( $item, 3 );
+
+		echo '<p><input type="number" name="swpm-settings['.esc_attr($item).']" id="loggedin_maximum" min="1" value="' . intval( $value ) . '" /></p>';
+		echo '<p class="description">' . esc_html__( 'Set the maximum number of active logins allowed for a user account.', 'simple-membership' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Once this limit is reached, any new login will automatically terminate all active sessions of the user from other browsers or devices.', 'simple-membership' ) . '</p>';
+	}
+
+    //	public function login_logic_callback( $args ) {
+    //		// Get settings value.
+    //        $item = $args['item'];
+    //		$value = $this->get_value( $item, 'allow' );
+    //
+    //        echo '<p><label><input type="radio" name="swpm-settings[' . esc_attr($item) . ']" value="allow" ' . checked( $value, 'allow', false ) . '/> ' . '<strong>' . esc_html__( 'Allow:', 'simple-membership' ) . '</strong> ' . esc_html__( 'Allow new login by terminating all other old sessions when the limit is reached.', 'simple-membership' ) .'</label></p>';
+    //		echo '<p><label><input type="radio" name="swpm-settings[' . esc_attr($item) . ']" value="block" ' . checked( $value, 'block', false ) . '/> ' . '<strong>' . esc_html__( 'Block:', 'simple-membership' ) . '</strong> ' . esc_html__( ' Do not allow new login if the limit is reached. Users need to wait for the old login sessions to expire.', 'simple-membership' ) .'</label></p>';
+    //	}
 
 	public function sanitize_tab_1( $input ) {
 		if ( empty( $this->settings ) ) {
@@ -1459,7 +1519,12 @@ class SwpmSettings {
 		$output['terms-and-conditions-page-url'] = esc_url( $input['terms-and-conditions-page-url'] );
 		$output['enable-privacy-policy']         = isset( $input['enable-privacy-policy'] ) ? esc_attr( $input['enable-privacy-policy'] ) : '';
 		$output['privacy-policy-page-url']       = esc_url( $input['privacy-policy-page-url'] );
-		return $output;
+
+		$output['enable-login-limiter'] = isset( $input['enable-login-limiter'] ) && !empty($input['enable-login-limiter']) ? esc_attr( $input['enable-login-limiter'] ) : '';
+        $output['maximum-active-logins'] = isset( $input['maximum-active-logins'] ) && !empty($input['maximum-active-logins']) ? esc_attr( $input['maximum-active-logins'] ) : '';
+        // $output['login-logic'] = isset( $input['login-logic'] ) && !empty($input['login-logic']) ? esc_attr( $input['login-logic'] ) : '';
+
+        return $output;
 	}
 
 	public function sanitize_tab_6( $input ) {

@@ -11,6 +11,10 @@
 .swpm-hidden{
     display: none;
 }
+.swpm-green-success-text{
+    font-weight: bold;
+    color: green;    
+}
 .swpm-red-error-text{
     font-weight: bold;
     color: red;
@@ -45,7 +49,6 @@
     margin: 10px 0px;
     padding: 15px 10px;
     color: #3F2502;
-    text-shadow: 1px 1px #FFFFFF;
     background-color: #FFF6D5;
     border-color: #D1B655;
     border-radius: 3px 3px 3px 3px;
@@ -345,4 +348,13 @@
 
 .swpm-cancel-subscription-form{
     margin-bottom: 0;
+}
+
+/* Media Queries */
+@media (max-width: 420px) {
+    /* Special CSS for small screen mobile devices */
+    /* Set the password reset text field width to 100% for better theme compatibility. */
+    .swpm-pw-reset-text {
+        width: 100%;
+    }
 }

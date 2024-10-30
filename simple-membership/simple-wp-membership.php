@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: Simple WordPress Membership
-Version: 4.5.4
+Version: 4.5.5
 Plugin URI: https://simple-membership-plugin.com/
 Author: smp7, wp.insider
 Author URI: https://simple-membership-plugin.com/
@@ -17,8 +17,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 //Define plugin constants
-define( 'SIMPLE_WP_MEMBERSHIP_VER', '4.5.4' );
-define( 'SIMPLE_WP_MEMBERSHIP_DB_VER', '1.3' );
+define( 'SIMPLE_WP_MEMBERSHIP_VER', '4.5.5' );
+define( 'SIMPLE_WP_MEMBERSHIP_DB_VER', '1.4' );
 define( 'SIMPLE_WP_MEMBERSHIP_SITE_HOME_URL', home_url() );
 define( 'SIMPLE_WP_MEMBERSHIP_PATH', dirname( __FILE__ ) . '/' );
 define( 'SIMPLE_WP_MEMBERSHIP_URL', plugins_url( '', __FILE__ ) );
@@ -31,15 +31,19 @@ define( 'SIMPLE_WP_MEMBERSHIP_AUTH', 'simple_wp_membership_' . COOKIEHASH );
 define( 'SIMPLE_WP_MEMBERSHIP_SEC_AUTH', 'simple_wp_membership_sec_' . COOKIEHASH );
 define( 'SIMPLE_WP_MEMBERSHIP_STRIPE_ZERO_CENTS', serialize( array( 'JPY', 'MGA', 'VND', 'KRW' ) ) );
 
-include_once( 'classes/class.simple-wp-membership.php' );
-include_once( 'classes/class.swpm-cronjob.php' );
-include_once( 'swpm-compat.php' );
+//Include the main class file.
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.simple-wp-membership.php' );
+//Include the compatibility file (for backward compatibility). It needs to be included after the main class file has included the necessary files.
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'swpm-compat.php' );//It will be removed in the future.
 
+//Perform some initial setup tasks.
 SwpmUtils::do_misc_initial_plugin_setup_tasks();
 
+//Register activation and deactivation hooks
 register_activation_hook( SIMPLE_WP_MEMBERSHIP_PATH . 'simple-wp-membership.php', 'SimpleWpMembership::activate' );
 register_deactivation_hook( SIMPLE_WP_MEMBERSHIP_PATH . 'simple-wp-membership.php', 'SimpleWpMembership::deactivate' );
 
+//Instantiate the main class
 $simple_membership = new SimpleWpMembership();
 $simple_membership_cron = new SwpmCronJob();
 
