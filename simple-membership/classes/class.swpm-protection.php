@@ -68,4 +68,53 @@ class SwpmProtection extends SwpmProtectionBase {
         return /* (($this->bitmap&1)!=1) && */ $this->in_parent_categories($id);
     }
 
+	/**
+	 * Save a list (in array format) of all protected post and page IDs (includes posts from all post types of the site).
+     * This can be useful when we need to quickly check if a post is protected or not given its ID.
+	 */
+	public static function save_swpm_all_protected_post_ids_list() {
+        // Get all post IDs of all post type (includes post, pages, custom post types) from the site.
+		$all_posts_ids = get_posts(array(
+			'post_type'      => 'any',
+			'post_status'    => 'publish',
+			'fields'         => 'ids', /* Only get IDs, not the full post objects. */
+			'posts_per_page' => -1
+		));
+
+		$protected_post_ids = array();
+		foreach ($all_posts_ids as $post_id){
+			if (SwpmProtection::get_instance()->is_protected($post_id)){
+				$protected_post_ids[] = $post_id;
+			}
+		}
+		if (!empty($protected_post_ids)){
+            // Save the list of all protected post IDs in the WP options table.
+			update_option('swpm_all_protected_post_ids_list', $protected_post_ids);
+		}
+	}
+
+	/**
+	 * Filter and keep only the post ids that are not permitted for the current user.
+	 */
+	public static function filter_protected_post_ids_list_for_current_user($post_ids_list) {
+        $filtered_protected_post_ids = array_filter($post_ids_list, 'SwpmProtection::is_post_protected_for_current_user');
+        // Reindex the array
+        $reindexed_array = array_values($filtered_protected_post_ids);        
+		return $reindexed_array;
+	}
+
+    /**
+     * Check if a post (given the post_id) is protected for the current user.
+     */
+	public static function is_post_protected_for_current_user($post_id) {
+        $swpm_access_control = SwpmAccessControl::get_instance();
+        if( $swpm_access_control->can_i_read_post_by_post_id($post_id) ){
+            // Not protected for current suer (the user has permission to read this post).
+            return false;
+        } else {
+            // Protected for current user (the user does not have permission to read this post).
+            return true;
+        }
+	}
+
 }

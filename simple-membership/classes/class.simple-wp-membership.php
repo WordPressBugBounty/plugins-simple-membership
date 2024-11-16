@@ -50,10 +50,18 @@ class SimpleWpMembership {
         new SwpmSelfActionHandler(); //Tackle the self action hook handling.
 	    new SwpmLimitActiveLogin(); // Tackle login limit functionalities.
 
-        add_action('admin_menu', array(&$this, 'menu'));
+        //Load the plugin text domain
+        //We are loading the text domain in init with a high priority for better compatibility with other plugins. Most langauges (example: de_DE) work fine with this. Alternative is to load it in plugins_loaded.
+        add_action('init', array(&$this, 'load_swpm_textdomain'), 5);
+
+        //The init and wp_loaded hooks.
         add_action('init', array(&$this, 'init_hook'));
         add_action('wp_loaded', array(&$this, 'handle_wp_loaded_tasks'));
 
+        //Admin menu hook.
+        add_action('admin_menu', array(&$this, 'menu'));
+
+        //Other general hooks
         add_filter('the_content', array(&$this, 'filter_content'), 20, 1);
         add_filter('widget_text', 'do_shortcode');
         add_filter('show_admin_bar', array(&$this, 'hide_adminbar'));
@@ -99,7 +107,55 @@ class SimpleWpMembership {
         //init is too early for settings api.
         add_action('admin_init', array(&$this, 'admin_init_hook'));
         add_action('plugins_loaded', array(&$this, "plugins_loaded"));
+
+        //Filter to exclude the protected posts from the search results.
+	    add_filter('pre_get_posts', array(&$this, 'exclude_swpm_protected_posts_from_wp_search_result'));
     }
+
+    public function load_swpm_textdomain() {
+		//Set up localisation. First loaded ones will override strings present in later loaded file.
+		//The following technique allows users to have a customized language in a different folder.
+		$locale = apply_filters( 'plugin_locale', get_locale(), 'simple-membership' );
+		load_textdomain( 'simple-membership', WP_LANG_DIR . "/simple-membership-$locale.mo" );
+        //Load the plugin's language files.
+		load_plugin_textdomain( 'simple-membership', false, SIMPLE_WP_MEMBERSHIP_DIRNAME . '/languages/' );
+    }
+
+	public function exclude_swpm_protected_posts_from_wp_search_result($query) {
+        //Let's determine if this query is for a standard WP search or a REST API search.
+        $is_search_queqry = false;
+        if (!is_admin() && $query->is_main_query() && $query->is_search()) {
+            $is_search_queqry = true;
+        } else if (defined('REST_REQUEST') && REST_REQUEST && (isset($query->query_vars['s']) || isset($query->query_vars['p']))) {
+            $is_search_queqry = true;
+        } 
+
+        if( !$is_search_queqry ){
+            //This is not a search query. Nothing to exclude.
+            return;
+        }
+
+        //Get the list of all protected post IDs.
+        $protected_post_ids = get_option('swpm_all_protected_post_ids_list');
+        if (empty($protected_post_ids)){
+            //Try rebuilding the list of protected post IDs now.
+            SwpmProtection::save_swpm_all_protected_post_ids_list();
+            $protected_post_ids = get_option('swpm_all_protected_post_ids_list');
+
+	        if (empty($protected_post_ids)){
+	            //No protected posts. Nothing to exclude.
+	            return;
+	        }
+        }
+
+        //Check if the user is logged in. If so, filter the protected post IDs for the current user.
+		if (SwpmAuth::get_instance()->is_logged_in()){
+			$protected_post_ids = SwpmProtection::filter_protected_post_ids_list_for_current_user($protected_post_ids);
+		}
+
+		// Modify the search query to exclude the protected posts.
+		$query->set('post__not_in', $protected_post_ids);
+	}
 
     public function wp_head_callback() {
         //This function is triggered by the wp_head action hook
@@ -843,6 +899,11 @@ class SimpleWpMembership {
                 }
             }
         }
+
+        //Save the list of all protected post IDs in the options table for quick access.
+        SwpmProtection::save_swpm_all_protected_post_ids_list();
+        
+        //Return data.
         $enable_protection = array();
         $enable_protection['protect'] = $swpm_protect_post;
         $enable_protection['level'] = $swpm_protection_level;
