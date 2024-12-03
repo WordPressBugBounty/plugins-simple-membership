@@ -122,6 +122,14 @@ class SimpleWpMembership {
     }
 
 	public function exclude_swpm_protected_posts_from_wp_search_result($query) {
+
+		// Trigger a filter so that other plugins can override this feature and allow protected posts to be included in search results.
+		$override_protected_post_exclusion = apply_filters('swpm_override_protected_post_exclusion_from_search', false);
+		if ($override_protected_post_exclusion){
+			// Allow searching protected posts without filtering them. Return from here to maintain this behavior.
+			return;
+		}
+
         //Let's determine if this query is for a standard WP search or a REST API search.
         $is_search_query = false;
         if (!is_admin() && $query->is_main_query() && $query->is_search()) {
@@ -139,7 +147,7 @@ class SimpleWpMembership {
         }
 
         //Get the list of all protected post IDs.
-        $protected_post_ids = get_option('swpm_all_protected_post_ids_list');
+        $protected_post_ids = SwpmProtection::get_all_protected_post_ids_list_from_db();
         if (empty($protected_post_ids)){
             return;
         }
@@ -895,9 +903,6 @@ class SimpleWpMembership {
                 }
             }
         }
-
-        //Save the list of all protected post IDs in the options table for quick access.
-        SwpmProtection::save_swpm_all_protected_post_ids_list();
         
         //Return data.
         $enable_protection = array();
@@ -987,7 +992,7 @@ class SimpleWpMembership {
             "username" => array(
                 "required" => __("Username is required", "simple-membership"),
                 "invalid" => __("Invalid username", "simple-membership"),
-                "regex" => __("Usernames can only contain: letters, numbers and .-_*@", "simple-membership"),
+                "regex" => __("Usernames can only contain: letters, numbers and .-_@", "simple-membership"),
                 "minLength" => __("Minimum 4 characters required", "simple-membership"),
                 "exists" => __("Username already exists", "simple-membership"),
             ),
@@ -1102,7 +1107,7 @@ class SimpleWpMembership {
                 'alertText' => '* ' . SwpmUtils::_('Password must contain at least:').'<br>'.SwpmUtils::_('- a digit').'<br>'.SwpmUtils::_('- an uppercase letter').'<br>'.SwpmUtils::_('- a lowercase letter'),
             ),
             'SWPMUserName' => array(
-                'alertText' => '* ' . SwpmUtils::_('Invalid Username').'<br>'.SwpmUtils::_('Usernames can only contain: letters, numbers and .-_*@'),
+                'alertText' => '* ' . SwpmUtils::_('Invalid Username').'<br>'.SwpmUtils::_('Usernames can only contain: letters, numbers and .-_@'),
             ),
             'minSize' => array(
                 'alertText' => '* ' . SwpmUtils::_('Minimum '),
