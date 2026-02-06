@@ -1,13 +1,21 @@
 <?php
-SimpleWpMembership::enqueue_validation_scripts();
+$form_id = 'swpm-edit-level';
+
+SimpleWpMembership::enqueue_validation_scripts_v2(
+	'swpm-membership-level-form-validator',
+	array(
+		'form_id' => $form_id,
+	)
+);
+
 $is_email_activation_conflicting = SwpmSettings::get_instance()->get_value( 'default-account-status' ) == 'pending' && checked($email_activation, true, false) ? true : false;
 ?>
 <div class="wrap" id="swpm-level-page">
-<form action="" method="post" name="swpm-edit-level" id="swpm-edit-level" class="validate swpm-validate-form"<?php do_action('level_edit_form_tag');?>>
+<form action="" method="post" name="swpm-edit-level" id="<?php echo esc_attr($form_id); ?>" class="swpm-validate-form"<?php do_action('level_edit_form_tag');?>>
 <input name="action" type="hidden" value="editlevel" />
 <?php wp_nonce_field( 'edit_swpmlevel_admin_end', '_wpnonce_edit_swpmlevel_admin_end' ) ?>
 <h2><?php echo  SwpmUtils::_('Edit membership level'); ?></h2>
-<p>
+<p class="swpm-grey-box">
     <?php 
     echo __('You can edit details of a selected membership level from this interface. ', 'simple-membership');
     echo __(' Refer to ', 'simple-membership');
@@ -50,7 +58,15 @@ $is_email_activation_conflicting = SwpmSettings::get_instance()->get_value( 'def
                     <input type="text" value="<?php echo  checked(SwpmMembershipLevel::YEARS,$subscription_duration_type,false)? $subscription_period: "";?>" name="subscription_period_<?php echo  SwpmMembershipLevel::YEARS?>"> <?php echo  SwpmUtils::_('Years (Access expires after given number of years)')?></p>                
                 
                 <p><input type="radio" <?php echo  checked(SwpmMembershipLevel::FIXED_DATE,$subscription_duration_type,false)?> value="<?php echo  SwpmMembershipLevel::FIXED_DATE?>" name="subscription_duration_type" /> <?php echo  SwpmUtils::_('Fixed Date Expiry')?> 
-                    <input type="text" class="swpm-date-picker" value="<?php echo  checked(SwpmMembershipLevel::FIXED_DATE,$subscription_duration_type,false)? $subscription_period: "";?>" name="subscription_period_<?php echo  SwpmMembershipLevel::FIXED_DATE?>" id="subscription_period_<?php echo  SwpmMembershipLevel::FIXED_DATE?>"> <?php echo  SwpmUtils::_('(Access expires on a fixed date)')?></p>                                
+                    <input type="text" class="swpm-date-picker" value="<?php echo  checked(SwpmMembershipLevel::FIXED_DATE,$subscription_duration_type,false)? $subscription_period: "";?>" name="subscription_period_<?php echo  SwpmMembershipLevel::FIXED_DATE?>" id="subscription_period_<?php echo  SwpmMembershipLevel::FIXED_DATE?>"> <?php echo  SwpmUtils::_('(Access expires on a fixed date)')?></p>
+
+                <?php $is_annual_fixed_date_checked = checked(SwpmMembershipLevel::ANNUAL_FIXED_DATE, $subscription_duration_type, false) ?>
+                <p><input type="radio" <?php echo !empty($is_annual_fixed_date_checked) ? 'checked' : '' ?> value="<?php echo SwpmMembershipLevel::ANNUAL_FIXED_DATE?>" name="subscription_duration_type" /> <?php _e('Annual Expiration Date','wp-express-checkout')?>
+	                <?php SwpmMiscUtils::month_day_selector( !empty($is_annual_fixed_date_checked) ? $subscription_period : '' ); ?>
+                    <?php printf(__(' with a minimum period of %s days', 'simple-membership'), '<span><input name="annual_fixed_date_min_period" type="number" min="0" value="'.esc_attr(!empty($is_annual_fixed_date_checked) ? $annual_fixed_date_min_period : '').'" style="width: 60px;"></span>')?>
+                    <?php _e('(Memberships will expire on this date every year. Example value: December 31 for calendar-year memberships or June 30 for fiscal alignments). ', 'simple-membership'); ?>
+                    <?php echo '<a href="https://simple-membership-plugin.com/annual-calendar-or-fiscal-year-memberships/" target="_blank">' . __('View Documentation', 'simple-membership') . '</a>.'; ?>
+                </p>
         </td>        
     </tr>
     <tr class="form-field">
@@ -100,7 +116,11 @@ $is_email_activation_conflicting = SwpmSettings::get_instance()->get_value( 'def
     <?php echo apply_filters('swpm_admin_edit_membership_level_ui', '', $id); ?>
 </tbody>
 </table>
-<?php submit_button(SwpmUtils::_('Save Membership Level '), 'primary', 'editswpmlevel', true, array( 'id' => 'editswpmlevelsub' ) ); ?>
+<?php //submit_button(SwpmUtils::_('Save Membership Level '), 'primary', 'editswpmlevel', true, array( 'id' => 'editswpmlevelsub' ) ); ?>
+<p class="submit">
+    <button type="submit" class="button-primary"><?php _e('Save Membership Level', 'simple-membership') ?></button>
+    <input type="hidden" name="editswpmlevel" value="1">
+</p>
 </form>
 </div>
 <script>

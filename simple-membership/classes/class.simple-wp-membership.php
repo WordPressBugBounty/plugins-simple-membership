@@ -903,7 +903,7 @@ class SimpleWpMembership {
 	wp_register_style("swpm.stripe.style", "https://checkout.stripe.com/v3/checkout/button.css", array(), SIMPLE_WP_MEMBERSHIP_VER);
     }
 
-    public static function enqueue_validation_scripts_v2($handle, $params = null){
+    public static function enqueue_validation_scripts_v2($handle, $params = array()){
 
         if ( ! wp_script_is( $handle, 'registered' ) ) {
             wp_register_script($handle, SIMPLE_WP_MEMBERSHIP_URL . "/js/".$handle.".js", null, SIMPLE_WP_MEMBERSHIP_VER, true);
@@ -947,17 +947,24 @@ class SimpleWpMembership {
             ),
             "pp" => array(
                 "required" => __("You must accept the privacy policy", "simple-membership")
-            )
+            ),
+
+	        // Membership Level related:
+            "membershipLevelAlias" => array(
+	            "required" => __("Membership level name is required", "simple-membership")
+            ),
         );
 
         $ajax_url =  admin_url('admin-ajax.php');
 
         wp_add_inline_script($handle, "var swpmFormValidationAjax = ".wp_json_encode(array(
             'ajax_url' => $ajax_url,
-            'query_args' => $params['query_args'],
+            'query_args' => isset($params['query_args']) ? $params['query_args'] : array(),
         )), "before");
-       
-        wp_add_inline_script($handle, "var form_id = '".$params['form_id']."';", "before");
+
+		if (isset($params['form_id']) && !empty($params['form_id'])){
+            wp_add_inline_script($handle, "var form_id = '".$params['form_id']."';", "before");
+		}
 
         if (isset($params['custom_pass_pattern_validator']) && !empty($params['custom_pass_pattern_validator'])) {
             wp_add_inline_script($handle, "var custom_pass_pattern_validator = ".$params['custom_pass_pattern_validator'].";", "before");
@@ -982,7 +989,7 @@ class SimpleWpMembership {
             wp_add_inline_script($handle, "var strong_password_enabled = ".$params['is_strong_password_enabled'].";", "before");
         }
 
-        wp_localize_script($handle, "validationMsg",$validation_messages);
+        wp_localize_script($handle, "validationMsg", $validation_messages);
 
         wp_enqueue_script($handle);
     }  

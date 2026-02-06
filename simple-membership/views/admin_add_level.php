@@ -1,10 +1,19 @@
-<?php SimpleWpMembership::enqueue_validation_scripts(); ?>
-<div class="wrap" id="swpm-level-page">
+<?php
+$form_id = 'swpm-create-level';
 
-<form action="" method="post" name="swpm-create-level" id="swpm-create-level" class="validate swpm-validate-form">
+SimpleWpMembership::enqueue_validation_scripts_v2(
+	'swpm-membership-level-form-validator',
+	array(
+		'form_id' => $form_id,
+	)
+);
+
+?>
+<div class="wrap" id="swpm-level-page">
+<form action="" method="post" name="swpm-create-level" id="<?php echo esc_attr($form_id) ?>" class="swpm-validate-form">
 <input name="action" type="hidden" value="createlevel" />
 <h3><?php echo SwpmUtils::_('Add Membership Level'); ?></h3>
-<p>
+<p class="swpm-grey-box">
     <?php 
     echo __('Create new membership level.', 'simple-membership');
     echo __(' Refer to ', 'simple-membership');
@@ -17,7 +26,7 @@
     <tbody>
 	<tr>
             <th scope="row"><label for="alias"><?php echo  SwpmUtils::_('Membership Level Name'); ?> <span class="description"><?php echo  SwpmUtils::_('(required)'); ?></span></label></th>
-            <td><input class="regular-text validate[required]" name="alias" type="text" id="alias" value="" aria-required="true" /></td>
+            <td><input class="regular-text" name="alias" type="text" id="alias" value="" aria-required="true" /></td>
 	</tr>
 	<tr class="form-field form-required">
             <th scope="row"><label for="role"><?php echo  SwpmUtils::_('Default WordPress Role'); ?> <span class="description"><?php echo  SwpmUtils::_('(required)'); ?></span></label></th>
@@ -38,6 +47,12 @@
                 <input type="text" value="" name="subscription_period_<?php echo  SwpmMembershipLevel::YEARS?>"> <?php echo  SwpmUtils::_('Years (Access expires after given number of years)')?></p>
             <p><input type="radio" value="<?php echo  SwpmMembershipLevel::FIXED_DATE?>" name="subscription_duration_type" /> <?php echo  SwpmUtils::_('Fixed Date Expiry')?>
                 <input type="text" class="swpm-date-picker" value="<?php echo  date('Y-m-d');?>" name="subscription_period_<?php echo  SwpmMembershipLevel::FIXED_DATE?>"> <?php echo  SwpmUtils::_('(Access expires on a fixed date)')?></p>
+            <p><input type="radio" value="<?php echo  SwpmMembershipLevel::ANNUAL_FIXED_DATE?>" name="subscription_duration_type" /> <?php _e('Annual Expiration Date','wp-express-checkout')?>
+                <?php SwpmMiscUtils::month_day_selector(); ?>
+	            <?php printf(__(' with a minimum period of %s days', 'simple-membership'), '<span><input name="annual_fixed_date_min_period" type="number" min="0" value="" style="width: 60px;"></span>')?>
+	            <?php _e('(Memberships will expire on this date every year. Example value: December 31 for calendar-year memberships or June 30 for fiscal alignments). ', 'simple-membership'); ?>
+                <?php echo '<a href="https://simple-membership-plugin.com/annual-calendar-or-fiscal-year-memberships/" target="_blank">' . __('View Documentation', 'simple-membership') . '</a>.'; ?>
+            </p>
         </td>
     </tr>
     <tr class="form-field">
@@ -76,7 +91,10 @@
     <?php echo  apply_filters('swpm_admin_add_membership_level_ui', '');?>
 </tbody>
 </table>
-<?php submit_button( SwpmUtils::_('Add New Membership Level '), 'primary', 'createswpmlevel', true, array( 'id' => 'createswpmlevelsub' ) ); ?>
+<p class="submit">
+    <button type="submit" class="button-primary"><?php _e('Add New Membership Level', 'simple-membership') ?></button>
+    <input type="hidden" name="createswpmlevel" value="1">
+</p>
 </form>
 </div>
 <script>

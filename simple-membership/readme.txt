@@ -4,8 +4,8 @@ Donate link: https://simple-membership-plugin.com/
 Tags: member, members, members only, membership, memberships, register, WordPress membership plugin, content, content protection, paypal, restrict, restrict access, Restrict content, admin, access control, subscription, teaser, protection, profile, login, bbpress, stripe
 Requires at least: 6.0
 Requires PHP: 7.4
-Tested up to: 6.8
-Stable tag: 4.6.8
+Tested up to: 6.9
+Stable tag: 4.7.1
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,6 +19,17 @@ The simple membership plugin lets you protect your posts and pages so only your 
 
 = Unlimited Membership Access Levels =
 Set up unlimited membership levels (example: free, silver, gold etc) and protect your posts and pages using the membership levels you create.
+
+= Flexible Membership Duration Options =
+Simple Membership supports multiple membership duration models, including:
+
+* Fixed duration (days, weeks, months, or years)
+* No expiry / until canceled
+* Fixed future expiry date
+* Annual memberships (calendar or fiscal year based)
+* Subscription-driven access
+
+Each membership level can be configured independently to match your access rules.
 
 = User Friendly Interface for Content Protection =
 When you are editing a post or page in the WordPress editor, you can select to protect that post or page for your members.
@@ -180,6 +191,23 @@ You can find the full documentation for this plugin on the [Simple Membership pl
 5. Example of membership level management.
 
 == Changelog ==
+
+= 4.7.1 =
+- Added support for annual memberships, allowing you to create calendar year based memberships.
+- Added an option to delete the plugin generated required pages in the Reset Data addon.
+- The Stripe webhook endpoint URL is also displayed in the Stripe settings menu tab for easy copy-paste.
+- Added basic Stripe webhook event validation for sites that are not using the webhook signing secret option in the settings menu.
+
+= 4.7.0 =
+- Improved the validation JavaScript for the Add/Edit Membership Level screen to simplify the interface.
+- Added extra validation checks to the front-end profile update process to improve security.
+
+= 4.6.9 =
+- Added a new {expiry_date} email merge tag.
+- Bulk account activate notification email body now supports email merge tags.
+- Spanish language translation files updated.
+- Added center text align CSS to the WooCommerce protection message.
+- Romanian Leu currency can now be used for stripe buy now buttons.
 
 = 4.6.8 =
 - Added a new free social login addon to allow users to log in using their social media accounts. Refer to [this documentation](https://simple-membership-plugin.com/simple-membership-social-login-addon/) for more information.
