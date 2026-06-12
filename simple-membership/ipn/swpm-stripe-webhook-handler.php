@@ -18,8 +18,23 @@ class SwpmStripeWebhookHandler {
 			echo 'Empty Webhook data received.';
 			die;
 		}
-		// SwpmLog::log_simple_debug($input, true);
+
 		$event_json = json_decode( $input );
+
+		//For now, we only accept and validate the webhook events related to the subscription payments that our plugin handles.
+		$events_to_validate = array(
+			'invoice.payment_succeeded',
+			'customer.subscription.deleted',
+			'charge.refunded'
+		);
+
+		if (!in_array($event_json->type, $events_to_validate)) {
+			// No need to validate other unused events.
+			//Skip unused webhook event, give 200 status then exit out.
+			SwpmLog::log_simple_debug( 'Ignoring unused Stripe webhook event. Webhook type: ' . $event_json->type, true );
+			http_response_code( 200 ); // Tells Stripe we received this notification
+			exit();
+		}
 
 		// Check if webhook event data needs to be validated.
 		//More details here: https://stripe.com/docs/webhooks#signatures
@@ -47,11 +62,11 @@ class SwpmStripeWebhookHandler {
 		}
 
 		$type = isset($event_json->type) ? $event_json->type : '';
-		$stripe_api_version = isset($event_json->api_version) ? $event_json->api_version : '';
+		$stripe_api_version = isset($event_json->api_version) ? sanitize_text_field($event_json->api_version) : '';
 		SwpmLog::log_simple_debug( sprintf( 'Stripe subscription webhook received: %s and api version: %s. Checking if we need to handle this webhook.', $type, $stripe_api_version ), true );
 
-		if(SwpmMiscUtils::check_if_old_stripe_api_version($event_json->api_version)){
-			update_option( 'swpm_stripe_received_api_old_version', $event_json->api_version );
+		if(SwpmMiscUtils::check_if_old_stripe_api_version($stripe_api_version)){
+			update_option( 'swpm_stripe_received_api_old_version', $stripe_api_version );
 		}
 
 		if ( 'customer.subscription.deleted' === $type || 'charge.refunded' === $type ) {
@@ -258,17 +273,6 @@ class SwpmStripeWebhookHandler {
 
 	public static function validate_webhook_data_no_signing_key($event_data_raw){
 		$received_event = json_decode( $event_data_raw );
-
-		$events_to_validate = array(
-			'invoice.payment_succeeded', 
-			'customer.subscription.deleted',
-			'charge.refunded'
-		);
-
-		if (!in_array($received_event->type, $events_to_validate)) {
-			// No need to validate other unused events.
-			return true;
-		}
 
 		$max_allowed_event_creation_time_diff = 6 * 60 * 60; // 6 hours.
 
