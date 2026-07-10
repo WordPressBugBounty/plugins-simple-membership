@@ -5,7 +5,7 @@ Tags: member, members, members only, membership, memberships, register, WordPres
 Requires at least: 6.0
 Requires PHP: 7.4
 Tested up to: 7.0
-Stable tag: 4.7.6
+Stable tag: 4.7.7
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -34,20 +34,20 @@ Each membership level can be configured independently to match your access rules
 = User Friendly Interface for Content Protection =
 When you are editing a post or page in the WordPress editor, you can select to protect that post or page for your members.
 
-Non-members viewing a protected page will be prompted to log in or become a member.
+Non-members who try to view a protected page will be prompted to log in or become a member.
 
 = Have Free and Paid Memberships =
-You can configure it to have free and/or paid memberships on your site. Paid membership payment is handled securely via PayPal. Membership payment can also be accepted using Stripe or Braintree payment gateways.
+You can configure your site to offer free memberships, paid memberships, or both. Paid membership payments are handled securely via PayPal, Stripe, or Braintree.
 
-Both one time and recurring/subscription payments are supported for PayPal and Stripe.
+Both one-time and recurring (subscription) payments are supported for PayPal and Stripe.
 
-You can accept one time membership payment via Braintree payment gateway.
+Both one-time and recurring/subscription payments are supported for PayPal and Stripe. Use the subscription payment feature to offer memberships that renew automatically on a regular basis (for example, every month or every year), or offer one-time payment memberships that do not renew automatically.
+
+Braintree supports one-time membership payments.
 
 Option to make membership payment buttons using the new PayPal Checkout API.
 
-There is also option to use PayPal smart buttons for membership payment.
-
-You can enable email activation or email confirmation for the free memberships.
+For free memberships, you can enable email activation or email confirmation during the registration process.
 
 = Membership Payments Log =
 All the payments from your members are recorded in the plugin. You can view them anytime by visiting the payments menu from the admin dashboard.
@@ -191,6 +191,12 @@ You can find the full documentation for this plugin on the [Simple Membership pl
 5. Example of membership level management.
 
 == Changelog ==
+
+= 4.7.7 =
+- Removed the obsolete PayPal Smart Checkout related code to clean up the codebase.
+- The PayPal Standard IPN data validation now also validates the merchant/receiver email. Thank you to Muni Nitish Kumar for reporting this.
+- The deprecated/legacy PayPal hosted button code removed from the plugin to clean up the codebase.
+- Fixed a minor PHP notice issue in the PayPal IPN handler code.
 
 = 4.7.6 =
 - Important Note: A Stripe webhook signing secret is now required to process Stripe subscription webhook events. This provides an additional layer of security.
