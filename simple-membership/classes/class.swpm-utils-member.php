@@ -432,6 +432,76 @@ class SwpmMemberUtils {
                 }
             }
         }
+	
+	/**
+	 * Find a WordPress user by email or username.
+	 *
+	 * @param array $member_email_and_username Array containing 'email' and 'user_name' keys.
+	 * 
+	 * @return array Array containing 'wp_user_id', 'identified_by', and 'identifier_value' if a user is found, empty array otherwise.
+	 */
+	public static function find_wp_user_by_email_or_username($member_email_and_username){
+		// Check if the member_info belongs to any existing wp user account.
+		$wp_user_id = isset($member_email_and_username['email']) && !empty($member_email_and_username['email']) ? email_exists( $member_email_and_username['email'] ) : 0;
+		if (!empty($wp_user_id)) {
+			return array(
+				'wp_user_id' => $wp_user_id,
+				'identified_by' => 'email',
+				'identifier_value' => $member_email_and_username['email'],
+			);
+		}
+		
+		$wp_user_id = isset($member_email_and_username['user_name']) && !empty($member_email_and_username['user_name']) ? username_exists( $member_email_and_username['user_name'] ) : 0;
+		if (!empty($wp_user_id)) {
+			return array(
+				'wp_user_id' => $wp_user_id,
+				'identified_by' => 'username',
+				'identifier_value' => $member_email_and_username['user_name'],
+			);
+		}
+		
+		return array();
+	}
+
+	public static function is_existing_wp_user_binding_allowed() {
+		$allow_existing_wp_user_reg = SwpmSettings::get_instance()->get_value( 'allow-existing-wp-user-registration' );
+		if ( empty( $allow_existing_wp_user_reg ) ) {
+			return false;
+		}
+
+		return true;
+	}
+
+        /**
+         * Checks whether a registration attempt is allowed to bind (attach) to an already existing WP user account
+         * (identified via email_exists() or username_exists() by the caller). Binding to a pre-existing WP user
+         * without any proof of ownership (e.g. the account's current password) is disabled by default. Site admins
+         * can opt back into the old behavior via the "Allow Existing WP User Registration" option in Advanced Settings.
+         *
+         * @param int    $wp_user_id       The existing WP user ID that was matched.
+         * @param string $identifier_type  Either 'email' or 'username'. Used to build the correct error message.
+         * @param string $identifier_value The email or username value that was submitted.
+         */
+        public static function check_and_die_if_existing_wp_user_binding_not_allowed( $wp_user_id, $identifier_type, $identifier_value ) {
+            if ( empty( $wp_user_id ) ) {
+                return;
+            }
+
+            if ( self::is_existing_wp_user_binding_allowed() ) {
+                //Site admin has explicitly allowed registrations to bind to pre-existing WP user accounts. Nothing to do here.
+                return;
+            }
+
+            if ( $identifier_type === 'email' ) {
+                $error_msg = '<p>' . sprintf( __( 'This email address (%s) is already associated with an existing user account on this site.', 'simple-membership' ), $identifier_value ) . '</p>';
+            } else {
+                $error_msg = '<p>' . sprintf( __( 'This username (%s) is already associated with an existing user account on this site.', 'simple-membership' ), $identifier_value ) . '</p>';
+            }
+            $error_msg .= '<p>' . __( 'For security reasons, a new membership account cannot be automatically linked to an existing user account. Please use a different email address/username to register.', 'simple-membership' ) . '</p>';
+            $error_msg .= '<p>' . __( 'If this is your existing account, please contact the site admin so they can link it to a membership from the admin dashboard.', 'simple-membership' ) . '</p>';
+            SwpmLog::log_simple_debug( 'Registration blocked - attempted to bind to an existing WP user (ID: ' . $wp_user_id . ') via ' . $identifier_type . '. The "Allow Existing WP User Registration" option is disabled.', true );
+            wp_die( $error_msg );
+        }
 
         /**
          * Get wp user roles by user ID.
@@ -460,19 +530,67 @@ class SwpmMemberUtils {
 	public static function wp_user_has_admin_role( $wp_user_id ) {
 		$caps = get_user_meta( $wp_user_id, 'wp_capabilities', true );
 		if ( is_array( $caps ) && in_array( 'administrator', array_keys( (array) $caps ) ) ) {
-                    //This wp user has "administrator" role.
-                    return true;
+			//This wp user has "administrator" role in the current site.
+			return true;
 		}
-                //Check if $caps was empty (It can happen on sites with customized roles and capbilities). If yes, then perform an additional role check.
-                if ( empty ( $caps ) ){
-                    //Try to retrieve roles from the user object.
-                    SwpmLog::log_simple_debug( 'Empty caps. Calling get_wp_user_roles_by_id() to retrieve role.', true );
-                    $roles = self::get_wp_user_roles_by_id($wp_user_id);
-                    if ( is_array( $roles ) && in_array( 'administrator', array_keys( (array) $roles ) ) ) {
-                        //This wp user has "administrator" role.
-                        return true;
-                    }
-                }
+		
+		//Check if $caps was empty (It can happen on sites with customized roles and capbilities). If yes, then perform an additional role check.
+		if ( empty ( $caps ) ){
+			//Try to retrieve roles from the user object.
+			SwpmLog::log_simple_debug( 'Empty caps. Calling get_wp_user_roles_by_id() to retrieve role.', true );
+			$roles = self::get_wp_user_roles_by_id($wp_user_id);
+			if ( is_array( $roles ) && in_array( 'administrator', array_keys( (array) $roles ) ) ) {
+				//This wp user has "administrator" role.
+				return true;
+			}
+		}
+
+		// If this is a multisite install, check network-level and per-site roles as well.
+		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
+			// Network super-admins should always be treated as admins.
+			if ( function_exists( 'is_super_admin' ) && is_super_admin( $wp_user_id ) ) {
+				return true;
+			}
+
+			// Try to enumerate sites the user belongs to and inspect their roles on those sites.
+			if ( function_exists( 'get_blogs_of_user' ) ) {
+				$blogs = get_blogs_of_user( $wp_user_id );
+				if ( is_array( $blogs ) && ! empty( $blogs ) ) {
+					foreach ( $blogs as $blog ) {
+						// Support different shapes returned by WP versions.
+						$blog_id = null;
+						if ( is_object( $blog ) ) {
+							if ( isset( $blog->userblog_id ) ) {
+								$blog_id = $blog->userblog_id; // older WP versions
+							} elseif ( isset( $blog->blog_id ) ) {
+								$blog_id = $blog->blog_id;
+							}
+						} elseif ( is_array( $blog ) && isset( $blog['blog_id'] ) ) {
+							$blog_id = $blog['blog_id'];
+						}
+
+						if ( empty( $blog_id ) ) {
+							continue;
+						}
+
+						// Switch to that blog context and check capabilities/roles there.
+						switch_to_blog( $blog_id );
+						$local_caps = get_user_meta( $wp_user_id, 'wp_capabilities', true );
+						if ( is_array( $local_caps ) && array_key_exists( 'administrator', (array) $local_caps ) ) {
+							restore_current_blog();
+							return true;
+						}
+						$user_local = get_userdata( $wp_user_id );
+						if ( $user_local && ! empty( $user_local->roles ) && is_array( $user_local->roles ) && in_array( 'administrator', $user_local->roles ) ) {
+							restore_current_blog();
+							return true;
+						}
+
+						restore_current_blog();
+					}
+				}
+			}
+		}
 
 		return false;
 	}
