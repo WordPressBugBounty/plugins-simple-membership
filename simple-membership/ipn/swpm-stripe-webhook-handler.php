@@ -108,7 +108,9 @@ class SwpmStripeWebhookHandler {
 				//$cust_id = $event_json->data->object->billing_reason;
 				//$date = $event_json->data->object->date;
 				$price_in_cents = $event_json->data->object->amount_paid; //amount in cents
-				$currency_code  = $event_json->data->object->currency;
+				//Stripe always returns the currency code in lowercase. Convert it to uppercase so it can be
+				//matched against the SIMPLE_WP_MEMBERSHIP_STRIPE_ZERO_CENTS list (which uses uppercase codes).
+				$currency_code  = strtoupper( $event_json->data->object->currency );
 
 				$zero_cents = unserialize( SIMPLE_WP_MEMBERSHIP_STRIPE_ZERO_CENTS );
 				if ( in_array( $currency_code, $zero_cents, true ) ) {
@@ -170,6 +172,7 @@ class SwpmStripeWebhookHandler {
 				// Create the $ipn_data array.
 				$ipn_data                     = array();
 				$ipn_data['mc_gross']         = $payment_amount;
+				$ipn_data['mc_currency']      = $currency_code;
 				$ipn_data['first_name']       = $first_name;
 				$ipn_data['last_name']        = $last_name;
 				$ipn_data['payer_email']      = $customer_email;

@@ -33,6 +33,11 @@ class SwpmStripeSubscriptionIpnHandler {
 		$button_id    = absint( $button_id );
 		$button_title = sanitize_text_field( $_REQUEST['item_name'] );
 
+		if ( ! SwpmMiscUtils::check_if_valid_payment_btn_cpt_id( $button_id ) ) {
+			SwpmLog::log_simple_debug( 'Fatal Error! Invalid payment button ID received: ' . $button_id, false );
+			wp_die( esc_html( 'Fatal Error! Invalid payment button ID.' ) );
+		}
+
 		$stripe_token = isset( $_POST['stripeToken'] ) ? sanitize_text_field( stripslashes ( $_POST['stripeToken'] ) ) : '';
 		$stripe_token_type = isset( $_POST['stripeTokenType'] ) ? sanitize_text_field( stripslashes ( $_POST['stripeTokenType'] ) ) : '';
 		$stripe_email      = filter_input( INPUT_POST, 'stripeEmail', FILTER_SANITIZE_EMAIL );
@@ -106,7 +111,15 @@ class SwpmStripeSubscriptionIpnHandler {
 		$custom_var = SwpmTransactions::parse_custom_var( $custom );
 		$swpm_id    = isset( $custom_var['swpm_id'] ) ? $custom_var['swpm_id'] : '';
 
-		$payment_amount = $customer->subscriptions->data[0]->plan->amount / 100;
+		$plan_amount   = $customer->subscriptions->data[0]->plan->amount;
+		$currency_code = strtoupper( $customer->subscriptions->data[0]->plan->currency );
+		$zero_cents    = unserialize( SIMPLE_WP_MEMBERSHIP_STRIPE_ZERO_CENTS );
+		if ( in_array( $currency_code, $zero_cents, true ) ) {
+			//Zero-decimal currency (e.g. JPY). The amount is not in cents, so use it as is.
+			$payment_amount = $plan_amount;
+		} else {
+			$payment_amount = $plan_amount / 100;
+		}
 
 		// Create the $ipn_data array.
 		$ipn_data                     = array();

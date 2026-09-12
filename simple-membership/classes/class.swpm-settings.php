@@ -729,6 +729,64 @@ class SwpmSettings {
 			)
 		);
 
+		//Subscription Auto-Renewal email settings.
+		add_settings_section( 'subscription-renewal-email-settings', __( 'Email Settings (Subscription Auto-Renewal Notification)', 'simple-membership'), array( &$this, 'subscription_renewal_email_settings_callback' ), 'simple_wp_membership_settings' );
+		add_settings_field(
+			'subscription-renewal-member-mail-enable',
+			__( 'Send Notification to Member', 'simple-membership'),
+			array( &$this, 'checkbox_callback' ),
+			'simple_wp_membership_settings',
+			'subscription-renewal-email-settings',
+			array(
+				'item'    => 'subscription-renewal-member-mail-enable',
+				'message' => __( 'Enable this option to send an email notification to members after a successful automatic subscription payment. Disabled by default.', 'simple-membership'),
+			)
+		);
+        add_settings_field(
+			'subscription-renewal-member-mail-subject',
+			__( 'Email Subject', 'simple-membership'),
+			array( &$this, 'textfield_callback' ),
+			'simple_wp_membership_settings',
+			'subscription-renewal-email-settings',
+			array(
+				'item'    => 'subscription-renewal-member-mail-subject',
+				'message' => '',
+			)
+		);
+		add_settings_field(
+			'subscription-renewal-member-mail-body',
+			__( 'Email Body', 'simple-membership'),
+			array( &$this, 'wp_editor_callback' ),
+			'simple_wp_membership_settings',
+			'subscription-renewal-email-settings',
+			array(
+				'item'    => 'subscription-renewal-member-mail-body',
+				'message' => '',
+			)
+		);
+		add_settings_field(
+			'subscription-renewal-admin-mail-enable',
+			__( 'Send Notification to Admin', 'simple-membership'),
+			array( &$this, 'checkbox_callback' ),
+			'simple_wp_membership_settings',
+			'subscription-renewal-email-settings',
+			array(
+				'item'    => 'subscription-renewal-admin-mail-enable',
+				'message' => __( 'Enable this option to send a notification to the admin.', 'simple-membership'),
+			)
+		);
+		add_settings_field(
+			'subscription-renewal-admin-mail-address',
+			__( 'Admin Email Address', 'simple-membership' ),
+			array( &$this, 'textfield_callback' ),
+			'simple_wp_membership_settings',
+			'subscription-renewal-email-settings',
+			array(
+				'item'    => 'subscription-renewal-admin-mail-address',
+				'message' => __( 'Enter the email address where you want the admin notification email to be sent to.', 'simple-membership'),
+			)
+		);
+
 		//Manual account approval email settings.
 		add_settings_section( 'manual-account-approve-email-settings', __( 'Email Settings (Manual Account Approval)', 'simple-membership'), array( &$this, 'manual_account_approve_email_settings_callback' ), 'simple_wp_membership_settings' );
 		add_settings_field(
@@ -1457,12 +1515,14 @@ class SwpmSettings {
 
 	public function reset_password_settings_callback() {
 		_e( 'This email will be sent to your users when they use the password reset functionality.', 'simple-membership' );
+		echo ' ' . '<a href="https://simple-membership-plugin.com/password-reset-notification-email-customization/" target="_blank">' . __( 'Password reset feature  documentation', 'simple-membership' ) . '</a>.';
 	}
 
 	public function email_settings_overview_callback() {
 		echo '<div class="swpm-grey-box">';
 		echo '<p>';
-		_e( 'This interface lets you customize the various emails that get sent to your members for various actions. The default settings should be good to get your started.', 'simple-membership' );
+		_e( 'This interface lets you customize the various emails that get sent to your members for various actions. The default settings should be good to get you started.', 'simple-membership' );
+		echo ' ' . '<a href="https://simple-membership-plugin.com/default-email-settings-values-resetting-email-settings/" target="_blank">' . __( 'Default email settings documentation', 'simple-membership' ) . '</a>.';
 		echo '</p>';
 
 		echo '<p>';
@@ -1485,10 +1545,12 @@ class SwpmSettings {
 
 	public function upgrade_email_settings_callback() {
 		_e( 'This email will be sent to your users after account upgrade (when an existing member pays for a new membership level).', 'simple-membership' );
+		echo ' ' . '<a href="https://simple-membership-plugin.com/creating-membership-upgrade-button/" target="_blank">' . __( 'Membership upgrade button documentation', 'simple-membership' ) . '</a>.';
 	}
 
 	public function renewal_email_settings_callback() {
 		_e( 'This email will be sent to your users after account renewal (when an existing member pays for their current membership level).', 'simple-membership' );
+		echo ' ' . '<a href="https://simple-membership-plugin.com/creating-membership-renewal-button/" target="_blank">' . __( 'Membership renewal button documentation', 'simple-membership' ) . '</a>.';
 	}
 
 	public function bulk_activate_email_settings_callback() {
@@ -1497,6 +1559,12 @@ class SwpmSettings {
 
 	public function email_activation_email_settings_callback() {
 		_e( 'This email will be sent if Email Activation is enabled for a Membership Level.', 'simple-membership' );
+		echo ' ' . '<a href="https://simple-membership-plugin.com/email-activation-for-members/" target="_blank">' . __( 'Email activation feature documentation', 'simple-membership' ) . '</a>.';
+	}
+
+    public function subscription_renewal_email_settings_callback() {
+		_e( 'Optional email notifications for successful automatic subscription payments. Use this email to notify members when their subscription renews automatically. Notifications for renewals made via one-time payments are configured separately.', 'simple-membership' );
+		echo ' ' . '<a href="https://simple-membership-plugin.com/creating-membership-renewal-button/" target="_blank">' . __( 'Membership renewal button documentation', 'simple-membership' ) . '</a>.';
 	}
 
     public function subscription_cancel_email_settings_callback() {
@@ -1693,6 +1761,13 @@ class SwpmSettings {
 
         $output['subscription-cancel-admin-mail-enable']       = isset( $input['subscription-cancel-admin-mail-enable'] ) ? esc_attr( $input['subscription-cancel-admin-mail-enable'] ) : '';
         $output['subscription-cancel-admin-mail-address'] = sanitize_text_field( $input['subscription-cancel-admin-mail-address'] );
+
+		$output['subscription-renewal-member-mail-enable']       = isset( $input['subscription-renewal-member-mail-enable'] ) ? esc_attr( $input['subscription-renewal-member-mail-enable'] ) : '';
+		$output['subscription-renewal-member-mail-subject']    = sanitize_text_field( ( $input['subscription-renewal-member-mail-subject'] ?? '' ) );
+		$output['subscription-renewal-member-mail-body']    = wp_kses_post( ( $input['subscription-renewal-member-mail-body'] ?? '' ) );
+
+        $output['subscription-renewal-admin-mail-enable']       = isset( $input['subscription-renewal-admin-mail-enable'] ) ? esc_attr( $input['subscription-renewal-admin-mail-enable'] ) : '';
+        $output['subscription-renewal-admin-mail-address'] = sanitize_text_field( ( $input['subscription-renewal-admin-mail-address'] ?? '' ) );
 
 		$output['manual-account-approve-member-mail-enable'] = isset( $input['manual-account-approve-member-mail-enable'] ) ? esc_attr( $input['manual-account-approve-member-mail-enable'] ) : '';
 		$output['manual-account-approve-member-mail-subject'] = sanitize_text_field( $input['manual-account-approve-member-mail-subject'] );
