@@ -5,7 +5,7 @@ Tags: member, members, members only, membership, memberships, register, WordPres
 Requires at least: 6.0
 Requires PHP: 7.4
 Tested up to: 7.1
-Stable tag: 4.8.3
+Stable tag: 4.8.4
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -191,6 +191,14 @@ You can find the full documentation for this plugin on the [Simple Membership pl
 5. Example of membership level management.
 
 == Changelog ==
+
+= 4.8.4 =
+- Added two new filter hooks (swpm_show_expiry_date_value and swpm_show_expiry_date_output) to the [swpm_show_expiry_date] shortcode to allow customization of the displayed expiry date and the shortcode output.
+- Security fix: Registration and activation emails now use the member's saved email address, preventing requests from redirecting these emails to another address.
+- Security improvement: Email activation uses securely generated tokens with 24-hour expiry validation and protection against reuse and concurrent requests. Resends preserve existing unexpired links and have configurable limits for public requests.
+- Registration and activation emails no longer include passwords. Existing password placeholders display password reset guidance, and previously saved activation passwords are removed automatically in batches while preserving valid links and add-on metadata.
+- Registration now preserves account creation and completion hooks when an email cannot be prepared, and displays recovery instructions instead of prompting members to register again.
+- Invalid or expired activation links now include an option to resend the activation email.
 
 = 4.8.3 =
 - Added an option to send email notifications to members and the admin after automatic subscription renewal payments.

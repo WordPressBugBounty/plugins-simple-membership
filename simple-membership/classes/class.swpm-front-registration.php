@@ -198,9 +198,24 @@ class SwpmFrontRegistration extends SwpmRegistration {
 			// NOTE: check_and_die_if_existing_wp_user_exists() executes inside the create_swpm_user() method, so no need to add it to create_wp_user() in this code flow.
 
 			//SWPM user creation was successful. Now create the corresponding WP user record and send the notification email.
-			if ( $this->prepare_and_create_wp_user_front_end() && $this->send_reg_email() ){
+			if ( $this->prepare_and_create_wp_user_front_end() ){
+				$email_prepared = $this->send_reg_email();
+				if ( ! $email_prepared ) {
+					// Account creation succeeded. Keep the completion hooks and show recovery
+					// instructions instead of asking the member to register again.
+					$this->member_info['registration_email_failed'] = true;
+					$member = SwpmMemberUtils::get_user_by_user_name( $this->member_info['user_name'] );
+					$member_id = ! empty( $member ) ? $member->member_id : 0;
+					SwpmTransfer::get_instance()->set( 'status', array(
+						'succeeded' => true,
+						'message' => SwpmEmailActivation::registration_email_failure_message( $member_id, $this->email_activation ),
+					) );
+				}
 				do_action( 'swpm_front_end_registration_complete' ); //Keep this action hook for people who are using it (so their implementation doesn't break).
 				do_action( 'swpm_front_end_registration_complete_user_data', $this->member_info );
+				if ( ! $email_prepared ) {
+					return;
+				}
 
 				//Check if there is after registration redirect (for non-email activation scenario).
 				if ( ! $this->email_activation ) {
@@ -779,7 +794,7 @@ class SwpmFrontRegistration extends SwpmRegistration {
 		// Allow hooks to change the value of login_page_url
 		$login_page_url = apply_filters('swpm_email_activation_login_page_url', $login_page_url);
 
-		$member_id = FILTER_INPUT( INPUT_GET, 'swpm_member_id', FILTER_SANITIZE_NUMBER_INT );
+		$member_id = isset( $_GET['swpm_member_id'] ) ? filter_var( $_GET['swpm_member_id'], FILTER_VALIDATE_INT, array( 'options' => array( 'min_range' => 1 ) ) ) : false;
 
 		$member = SwpmMemberUtils::get_user_by_id( $member_id );
 		if ( empty( $member ) ) {
@@ -793,14 +808,16 @@ class SwpmFrontRegistration extends SwpmRegistration {
 			wp_die();
 		}
 
-		$code = isset( $_GET['swpm_token'] ) ? sanitize_text_field( stripslashes ( $_GET['swpm_token'] ) ) : '';
+		$code = isset( $_GET['swpm_token'] ) && is_string( $_GET['swpm_token'] ) ? sanitize_text_field( wp_unslash( $_GET['swpm_token'] ) ) : '';
 		$act_data = get_option( 'swpm_email_activation_data_usr_' . $member_id );
-		if ( empty( $code ) || empty( $act_data ) || $act_data['act_code'] !== $code ) {
+		if ( empty( $code ) || ! SwpmEmailActivation::is_valid( $act_data ) || ! hash_equals( $act_data['act_code'], $code ) ) {
 			//code mismatch
-			wp_die( SwpmUtils::_( 'Activation code mismatch. Cannot activate this account. Please contact the site admin.' ) );
+			wp_die( SwpmEmailActivation::invalid_link_message( $member_id ) );
 		}
 		//activation code match
-		delete_option( 'swpm_email_activation_data_usr_' . $member_id );
+		if ( ! SwpmEmailActivation::consume( $member_id, $act_data ) ) {
+			wp_die( SwpmEmailActivation::invalid_link_message( $member_id ) );
+		}
 		//store rego form id in constant so FB addon could use it
 		if ( ! empty( $act_data['fb_form_id'] ) ) {
 			define( 'SWPM_EMAIL_ACTIVATION_FORM_ID', $act_data['fb_form_id'] );
@@ -808,7 +825,8 @@ class SwpmFrontRegistration extends SwpmRegistration {
 		$activation_account_status = apply_filters( 'swpm_activation_feature_override_account_status', 'active' );
 		SwpmMemberUtils::update_account_state( $member_id, $activation_account_status );
 		$this->member_info = (array) $member;
-		$this->member_info['plain_password'] = SwpmUtils::crypt( $act_data['plain_password'], 'd' );
+		$this->member_info['plain_password'] = '';
+		$this->email_activation = false;
 		$this->send_reg_email();
 
 		//Setup the success message.
@@ -853,34 +871,20 @@ class SwpmFrontRegistration extends SwpmRegistration {
 		// Allow hooks to change the value of login_page_url
 		$login_page_url = apply_filters('swpm_resend_activation_email_login_page_url', $login_page_url);
 
-		$member_id = FILTER_INPUT( INPUT_GET, 'swpm_member_id', FILTER_SANITIZE_NUMBER_INT );
+		$member_id = isset( $_GET['swpm_member_id'] ) ? filter_var( $_GET['swpm_member_id'], FILTER_VALIDATE_INT, array( 'options' => array( 'min_range' => 1 ) ) ) : false;
 
-		$member = SwpmMemberUtils::get_user_by_id( $member_id );
-		if ( empty( $member ) ) {
-			//can't find member
-			echo SwpmUtils::_( 'Cannot find member account.' );
-			wp_die();
-		}
-		if ( $member->account_state !== 'activation_required' ) {
-			//account already active
-			$acc_active_msg = SwpmUtils::_( 'Account already active. ' ) . '<a href="' . $login_page_url . '">' . SwpmUtils::_( 'click here' ) . '</a>' . SwpmUtils::_( ' to log in.' );
-			echo $acc_active_msg;
-			wp_die();
-		}
-		$act_data = get_option( 'swpm_email_activation_data_usr_' . $member_id );
-		if ( ! empty( $act_data ) ) {
-			//looks like activation data has been removed for some reason. We won't be able to have member's plain password in this case
-			$act_data['plain_password'] = '';
+		if ( $member_id > 0 && SwpmEmailActivation::allow_public_resend( $member_id ) ) {
+			$member = SwpmMemberUtils::get_user_by_id( $member_id );
+			if ( ! empty( $member ) && $member->account_state === 'activation_required' ) {
+				$this->member_info = (array) $member;
+				$this->member_info['plain_password'] = '';
+				$this->email_activation = true;
+				$this->send_reg_email();
+			}
 		}
 
-		delete_option( 'swpm_email_activation_data_usr_' . $member_id );
-
-		$this->member_info = (array) $member;
-		$this->member_info['plain_password'] = SwpmUtils::crypt( $act_data['plain_password'], 'd' );
-		$this->email_activation = true;
-		$this->send_reg_email();
-
-		$msg = '<div class="swpm_temporary_msg" style="font-weight: bold;">' . SwpmUtils::_( 'Activation email has been sent. Please check your email and activate your account.' ) . '</div>';
+		// Same response for missing, active and throttled accounts to avoid member enumeration.
+		$msg = '<div class="swpm_temporary_msg" style="font-weight: bold;">' . SwpmUtils::_( 'If this account needs activation, an email will be sent to its registered address. Please check your inbox. If you recently requested an email, wait before trying again.' ) . '</div>';
 		SwpmMiscUtils::show_temporary_message_then_redirect( $msg, $login_page_url );
 		wp_die();
 	}
