@@ -5,7 +5,7 @@ Tags: member, members, members only, membership, memberships, register, WordPres
 Requires at least: 6.0
 Requires PHP: 7.4
 Tested up to: 7.1
-Stable tag: 4.8.5
+Stable tag: 4.8.6
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -117,6 +117,7 @@ You can create a free forum account to ask your questions.
 * Option to hide the registration/join option. Useful if you prefer visitors not to see the registration option on your site.
 * Option to automatically logout the members when they close the browser.
 * Ability to forward the payment notification to an external URL for further processing.
+* Automatically deactivates a member's account when their PayPal or Stripe payment is refunded, with options to keep the account active for one-time or subscription refunds.
 * Option to configure whitelisting for user email addresses to allow registration only from specific email addresses or email domains.
 * Option to configure blacklisting for user email addresses to block registration from certain email addresses or email domains.
 * Allows you to set an active login limit for members, helping to prevent account sharing.
@@ -191,6 +192,20 @@ You can find the full documentation for this plugin on the [Simple Membership pl
 5. Example of membership level management.
 
 == Changelog ==
+
+= 4.8.6 =
+- Fixed a login loop that could happen when the login form was submitted shortly after the member's login session expired. The login request is now processed normally and a fresh login session is created. Thanks to freetiermorioka555 for reporting this.
+- The logout request now clears any leftover (expired) login cookies from the browser, even when the login session is no longer valid.
+- Fixed a grammatical error in the German translation of the password reset message. Thanks to Annika for reporting this.
+- Fixed an issue where the Force WP User Synchronization feature could log a member out right after a successful login.
+- Stripe Buy Now: the payment currency, billing country code, payment method type, card country and Stripe fee are now included in the payment data passed to the swpm_payment_ipn_processed hook. Thanks to Th0masL for the contribution.
+- Fixed an issue where PayPal PPCP subscription renewal payments could be saved with an empty member ID. The member is now found using the subscription ID.
+- Fixed an issue where a PayPal subscription payment (PAYMENT.SALE.COMPLETED webhook) could be lost when a PayPal API call failed. The webhook now responds with an error so PayPal sends it again. Also added a 30 second timeout to the PayPal API requests.
+- Added handling for the PayPal BILLING.SUBSCRIPTION.PAYMENT.FAILED webhook event. It logs the failed payment and triggers the new swpm_paypal_subscription_payment_failed action hook.
+- Fixed some registration form and payment button filter hooks that were not printing the value returned by the callback. Thanks to Th0masL for the contribution.
+- Improved PayPal and Stripe refund handling and synchronization of payment and subscription statuses.
+- Added two options in the Payment Settings menu to keep the member account active when a one-time or subscription payment is refunded (by default, the account is deactivated). Also added the swpm_deactivate_account_on_refund filter hook.
+- Added 3 new filter hooks: swpm_validate_user_name_ajax_override, swpm_registration_form_validation_query_args and swpm_login_widget_logged_in_username. Thanks to Th0masL for the contribution.
 
 = 4.8.5 =
 - The attachment URL and metadata filters no longer run before the init hook. This prevents the "_load_textdomain_just_in_time" notice with themes (e.g. Cocoon) that request attachments early.

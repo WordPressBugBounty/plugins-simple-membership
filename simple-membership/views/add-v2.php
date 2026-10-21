@@ -34,10 +34,11 @@ $is_strong_password_enabled = empty($force_strong_pass) ? 'false' : 'true';
 SimpleWpMembership::enqueue_validation_scripts_v2(
     'swpm-reg-form-validator',
     array(
-        'query_args' => array(
+        // Addons can add their own query args to the AJAX validation requests of this form.
+        'query_args' => apply_filters('swpm_registration_form_validation_query_args', array(
             'member_id' => filter_input(INPUT_GET, 'member_id', FILTER_SANITIZE_NUMBER_INT),
             'nonce' => wp_create_nonce('swpm-rego-form-ajax-nonce'),
-        ),
+        )),
         'form_id' => $form_id,
         'is_terms_enabled' => $is_terms_enabled,
         'is_pp_enabled' => $is_pp_enabled,
@@ -67,12 +68,12 @@ if (!empty($display_reg_form_password_toggle)) {
     <form id="<?php echo $form_id ?>" class="swpm-form" name="swpm-registration-form" method="post" action="">
         <input type="hidden" name="level_identifier" value="<?php echo $level_identifier ?>" />
         <div class="swpm-registration-form-section">
-            <div class="swpm-form-row swpm-username-row" <?php apply_filters('swpm_registration_form_username_tr_attributes', ''); ?>>
+            <div class="swpm-form-row swpm-username-row" <?php echo apply_filters('swpm_registration_form_username_tr_attributes', ''); ?>>
                 <div class="swpm-form-label-wrap swpm-form-username-label-wrap">
                     <label for="user_name"><?php _e('Username', "simple-membership") ?></label>
                 </div>
                 <div class="swpm-form-input-wrap swpm-form-username-input-wrap">
-                    <input type="text" id="user_name" autocomplete="new-username" class="swpm-form-field swpm-form-username" value="<?php echo esc_attr($user_name); ?>" name="user_name" <?php apply_filters('swpm_registration_form_username_input_attributes', ''); ?> />
+                    <input type="text" id="user_name" autocomplete="new-username" class="swpm-form-field swpm-form-username" value="<?php echo esc_attr($user_name); ?>" name="user_name" <?php echo apply_filters('swpm_registration_form_username_input_attributes', ''); ?> />
                 </div>
                 <div class="swpm-form-desc"></div>
             </div>
@@ -103,7 +104,7 @@ if (!empty($display_reg_form_password_toggle)) {
                 </div>
                 <div class="swpm-form-desc"></div>
             </div>
-            <div class="swpm-form-row swpm-firstname-row" <?php apply_filters('swpm_registration_form_firstname_tr_attributes', ''); ?>>
+            <div class="swpm-form-row swpm-firstname-row" <?php echo apply_filters('swpm_registration_form_firstname_tr_attributes', ''); ?>>
                 <div class="swpm-form-label-wrap swpm-form-firstname-label-wrap">
                     <label for="first_name"><?php _e('First Name', "simple-membership") ?></label>
                 </div>
@@ -112,7 +113,7 @@ if (!empty($display_reg_form_password_toggle)) {
                 </div>
                 <div class="swpm-form-desc"></div>
             </div>
-            <div class="swpm-form-row swpm-lastname-row" <?php apply_filters('swpm_registration_form_lastname_tr_attributes', ''); ?>>
+            <div class="swpm-form-row swpm-lastname-row" <?php echo apply_filters('swpm_registration_form_lastname_tr_attributes', ''); ?>>
                 <div class="swpm-form-label-wrap swpm-form-lastname-label-wrap">
                     <label for="last_name"><?php _e('Last Name', "simple-membership") ?></label>
                 </div>
@@ -123,7 +124,7 @@ if (!empty($display_reg_form_password_toggle)) {
             </div>
             <div
                 class="swpm-form-row swpm-membership-level-row"
-                <?php apply_filters('swpm_registration_form_membership_level_tr_attributes', ''); ?>
+                <?php echo apply_filters('swpm_registration_form_membership_level_tr_attributes', ''); ?>
                 style="<?php echo !empty($hide_membership_level_field) ? 'display:none' : '' ?>"
             >
                 <div class="swpm-form-label-wrap swpm-form-membership-level-label-wrap">
@@ -146,7 +147,7 @@ if (!empty($display_reg_form_password_toggle)) {
                 </div>
             </div>
             <?php
-            apply_filters('swpm_registration_form_before_terms_and_conditions', '');
+            echo apply_filters('swpm_registration_form_before_terms_and_conditions', '');
 
             // Check if we need to display Terms and Conditions checkbox.
             if (!empty($terms_enabled)) {

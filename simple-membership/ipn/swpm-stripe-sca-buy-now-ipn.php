@@ -162,8 +162,14 @@ class SwpmStripeSCABuyNowIpnHandler {
 			$charge_id = $pi->latest_charge;
 			//For Stripe API version 2022-11-15 or later, the charge object is not included in the payment intents object. It needs to be retrieved using the charge ID.
 			try {
-				//Retrieve the charge object using the charge ID
-				$charge = \Stripe\Charge::retrieve($charge_id);
+				//Retrieve the charge object using the charge ID (with its balance transaction, for the Stripe fee)
+				try {
+					$charge = \Stripe\Charge::retrieve( array( 'id' => $charge_id, 'expand' => array( 'balance_transaction' ) ) );
+				} catch ( \Stripe\Exception\PermissionException $e ) {
+					//Safety net: retrieve the charge without its balance transaction (the fee will be empty).
+					SwpmLog::log_simple_debug( 'Could not expand the balance transaction, so the Stripe fee will be empty. Retrieving the charge without it: ' . $e->getMessage(), false );
+					$charge = \Stripe\Charge::retrieve( $charge_id );
+				}
 			} catch (\Stripe\Exception\ApiErrorException $e) {
 				// Handle the error
 				SwpmLog::log_simple_debug( 'Stripe error occurred trying to retrieve the charge object using the charge ID. ' . $e->getMessage(), false );
@@ -295,6 +301,7 @@ class SwpmStripeSCABuyNowIpnHandler {
 		// Create the $ipn_data array.
 		$ipn_data                     = array();
 		$ipn_data['mc_gross']         = $payment_amount;
+		$ipn_data['mc_currency']      = $currency_code;
 		$ipn_data['first_name']       = $first_name;
 		$ipn_data['last_name']        = $last_name;
 		$ipn_data['payer_email']      = $stripe_email;
@@ -321,6 +328,11 @@ class SwpmStripeSCABuyNowIpnHandler {
 			$ipn_data['address_country'] = $country;
 		}
 
+		// More details for reports and tax evidence (e.g. EU VAT): the billing country code (the country name above
+		// does not always convert back to a code), the payment method, the country of the card and Stripe's fee.
+		$ipn_data['address_country_code'] = ( strlen( $country ) == 2 ) ? strtoupper( $country ) : '';
+		$ipn_data = array_merge( $ipn_data, self::get_charge_details( $charge ) );
+
 		$ipn_data['payment_button_id'] = $button_id;
 		$ipn_data['is_live'] = ! $sandbox_enabled;
 
@@ -342,6 +354,43 @@ class SwpmStripeSCABuyNowIpnHandler {
 
 		// Redirect the user to the registration URL or return URL (or to the homepage if a return URL is not specified for this payment button).
 		SwpmMiscUtils::handle_after_payment_redirect( $button_id );
+	}
+
+	/**
+	 * Details of the payment read from the Stripe charge, added to the IPN data (empty string when not known):
+	 * - payment_method_type: 'card', 'bancontact', 'eps'...
+	 * - card_country: 2-letter country of the bank that issued the card (cards only);
+	 * - payment_fee / payment_fee_currency: the balance transaction's fee, in the currency of the Stripe balance
+	 *   (can differ from mc_currency). Read from the expanded charge, no extra API call. Empty when Stripe has not
+	 *   created the balance transaction yet (seen with Bancontact and EPS).
+	 */
+	public static function get_charge_details( $charge ) {
+		$details = array(
+			'payment_method_type'  => '',
+			'card_country'         => '',
+			'payment_fee'          => '',
+			'payment_fee_currency' => '',
+		);
+
+		if ( isset( $charge->payment_method_details->type ) ) {
+			$details['payment_method_type'] = $charge->payment_method_details->type;
+		}
+		if ( isset( $charge->payment_method_details->card->country ) ) {
+			$details['card_country'] = strtoupper( $charge->payment_method_details->card->country );
+		}
+
+		// The balance transaction is an object only when it was expanded (otherwise just its ID, or empty).
+		$bt = isset( $charge->balance_transaction ) ? $charge->balance_transaction : null;
+		if ( is_object( $bt ) && isset( $bt->fee ) && ! empty( $bt->currency ) ) {
+			$currency            = strtoupper( $bt->currency );
+			$zero_cents_currency = unserialize( SIMPLE_WP_MEMBERSHIP_STRIPE_ZERO_CENTS );
+			$fee                 = in_array( $currency, $zero_cents_currency, true ) ? $bt->fee : $bt->fee / 100;
+
+			$details['payment_fee']          = round( floatval( $fee ), 2 );
+			$details['payment_fee_currency'] = $currency;
+		}
+
+		return $details;
 	}
 
 }

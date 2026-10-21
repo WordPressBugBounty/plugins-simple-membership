@@ -257,7 +257,50 @@ function swpm_handle_subsc_signup_stand_alone( &$ipn_data, $subsc_ref, $unique_r
 }
 
 /*
- * This function will handle the refund notification from PayPal as long as the parent transction ID is present.
+ * Returns the type of the refunded payment: 'one_time' or 'subscription'.
+ * 1) Uses the 'refund_payment_type' value if the caller (gateway handler) has set it.
+ * 2) Otherwise, checks the original transaction record (found using the parent transaction ID).
+ * 3) Otherwise, uses the subscription ID in the refund data.
+ * A payment is considered a subscription payment when its subscr_id is present and different from the transaction ID (one-time payments use the transaction ID as the subscr_id).
+ */
+function swpm_get_refund_payment_type( $ipn_data ) {
+	if ( isset( $ipn_data['refund_payment_type'] ) && in_array( $ipn_data['refund_payment_type'], array( 'one_time', 'subscription' ), true ) ) {
+		return $ipn_data['refund_payment_type'];
+	}
+
+	$parent_txn_id = isset( $ipn_data['parent_txn_id'] ) ? (string) $ipn_data['parent_txn_id'] : '';
+	if ( $parent_txn_id !== '' ) {
+		$txn_db_row = SwpmTransactions::get_transaction_row_by_txn_id( $parent_txn_id, true );
+		if ( $txn_db_row ) {
+			$txn_subscr_id = isset( $txn_db_row->subscr_id ) ? (string) $txn_db_row->subscr_id : '';
+			return ( $txn_subscr_id !== '' && $txn_subscr_id !== $parent_txn_id ) ? 'subscription' : 'one_time';
+		}
+	}
+
+	$subscr_id = isset( $ipn_data['subscr_id'] ) ? (string) $ipn_data['subscr_id'] : '';
+	return ( $subscr_id !== '' && $subscr_id !== $parent_txn_id ) ? 'subscription' : 'one_time';
+}
+
+/*
+ * Checks if the member account should be deactivated for this refund (based on the refund settings in the payment settings menu).
+ * By default, the member account is deactivated when a payment is refunded.
+ */
+function swpm_should_deactivate_account_on_refund( $member_id, $ipn_data ) {
+	$refund_payment_type = swpm_get_refund_payment_type( $ipn_data );
+	$setting_key = ( $refund_payment_type === 'subscription' ) ? 'disable-deactivation-on-subscription-refund' : 'disable-deactivation-on-one-time-refund';
+	$deactivate = empty( SwpmSettings::get_instance()->get_value( $setting_key ) );
+
+	// Allow sites to apply their own refund policy. Example: deactivate only on a full refund.
+	$deactivate = apply_filters( 'swpm_deactivate_account_on_refund', $deactivate, $member_id, $ipn_data, $refund_payment_type );
+
+	if ( ! $deactivate ) {
+		swpm_debug_log_subsc( 'Refund recorded. The member account was not deactivated due to the refund settings. Refund payment type: ' . $refund_payment_type . ', Member ID: ' . $member_id, true );
+	}
+	return $deactivate;
+}
+
+/*
+ * This function will handle the refund notification from PayPal as long as the parent transaction ID is present.
  * It will deactivate the corresponding member account.
  * It will also mark the transaction as "Refunded" in the transactions list.
  */
@@ -280,6 +323,15 @@ function swpm_handle_refund_using_parent_txn_id( $ipn_data ){
 	// Update the postmeta for the corresponding transaction cpt.
 	SwpmTransactions::update_transaction_status( $txn_row_id, 'Refunded' );
 
+	$payment_status = isset($ipn_data['payment_status']) ? sanitize_key($ipn_data['payment_status']) : '';
+	if( $payment_status == 'sale_refunded'){
+		// This is a subscription type order refund event
+		// Webhook deliveries may use a different environment from the current plugin setting.
+		$paypal_mode = isset( $ipn_data['paypal_mode'] ) ? $ipn_data['paypal_mode'] : '';
+		// Optional status reconciliation; lookup failure must not interrupt the refund handling below.
+		SWPM_Utils_Subscriptions::sync_canceled_subscription_record_status_with_gateway($txn_db_row->subscr_id, 'paypal', $paypal_mode);
+	}
+
 	//Get the member's ID associated with this transaction
 	$member_id = isset($txn_db_row->member_id) ? $txn_db_row->member_id : '';
 	if( empty ( $member_id )){
@@ -295,6 +347,28 @@ function swpm_handle_refund_using_parent_txn_id( $ipn_data ){
 
 	if( empty ( $member_id )){
 		swpm_debug_log_subsc("No associated member account found for the transaction id: " . $parent_txn_id. ". The member account may have been deleted.", true);
+		return;
+	}
+
+	if ( in_array( $payment_status, array( 'sale_refunded', 'capture_refunded' ), true ) ) {
+		// Refunding an old payment must not revoke access granted by a newer payment or subscription.
+		$member = SwpmMemberUtils::get_user_by_id( $member_id );
+		$refunded_access_id = isset( $txn_db_row->subscr_id ) ? $txn_db_row->subscr_id : '';
+		// One-time payments use the original capture ID as the member's subscr_id.
+		if ( $payment_status === 'capture_refunded' && empty( $refunded_access_id ) ) {
+			$refunded_access_id = $parent_txn_id;
+		}
+		$current_subscription_id = isset( $member->subscr_id ) ? $member->subscr_id : '';
+		// Member profiles may store the subscription ID with a pipe-delimited suffix.
+		$current_subscription_parts = explode( '|', $current_subscription_id, 2 );
+		if ( empty( $refunded_access_id ) || $current_subscription_parts[0] !== $refunded_access_id ) {
+			SwpmLog::log_simple_debug( 'Refund recorded, but the member is no longer attached to the refunded payment or subscription. Account status unchanged.', true );
+			return;
+		}
+	}
+
+	//Check the refund settings to see if the member account should be deactivated.
+	if ( ! swpm_should_deactivate_account_on_refund( $member_id, $ipn_data ) ) {
 		return;
 	}
 
@@ -357,7 +431,18 @@ function swpm_handle_subsc_cancel_stand_alone( $ipn_data, $refund = false ) {
 
 		// First, check if this is a refund notification.
 		if ( $refund ) {
-			// This is a refund (not just a subscription cancellation or end). So deactivate the account regardless and bail.
+			// The lookup above permits substring matches. Refunds must match the current access ID exactly,
+			// allowing only the pipe-delimited suffix used by member profiles.
+			$current_access_parts = explode( '|', (string) $resultset->subscr_id, 2 );
+			if ( ! empty( $ipn_data['require_exact_refund_match'] ) && ( empty( $subscr_id ) || $current_access_parts[0] !== $subscr_id ) ) {
+				swpm_debug_log_subsc( 'Refund does not match the member current payment or subscription. Account status unchanged.', true );
+				return;
+			}
+			//Check the refund settings to see if the member account should be deactivated.
+			if ( ! swpm_should_deactivate_account_on_refund( $member_id, $ipn_data ) ) {
+				return;
+			}
+			// This is a refund (not just a subscription cancellation or end). So deactivate the account and bail.
 			SwpmMemberUtils::update_account_state( $member_id, 'inactive' ); // Set the account status to inactive.
 			swpm_debug_log_subsc( 'Subscription refund notification received! Member account deactivated.', true );
 			return;
@@ -578,7 +663,8 @@ function swpm_send_subscription_renewal_notification_email( $member_id, $ipn_dat
 	}
 }
 
-function swpm_update_member_subscription_start_date_if_applicable( $ipn_data ) {
+//Note: $ipn_data is passed by reference so the caller gets the 'member_id' value (used when saving the transaction record).
+function swpm_update_member_subscription_start_date_if_applicable( &$ipn_data ) {
 	global $wpdb;
 	$email = isset( $ipn_data['payer_email'] ) ? $ipn_data['payer_email'] : '';
 	$subscr_id = isset( $ipn_data['subscr_id'] ) ? $ipn_data['subscr_id'] : '';
