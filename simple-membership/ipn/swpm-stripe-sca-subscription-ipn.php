@@ -27,6 +27,7 @@ class SwpmStripeSCASubscriptionIpnHandler {
 
 		// Read and sanitize the request parameters.
 		$ref_id = isset( $_GET['ref_id'] ) ? sanitize_text_field( stripslashes ( $_GET['ref_id'] ) ) : '';
+		$session_id = isset( $_GET['session_id'] ) ? sanitize_text_field( stripslashes ( $_GET['session_id'] ) ) : '';
 
 		if ( empty( $ref_id ) ) {
 			//no ref id provided, cannot proceed
@@ -69,22 +70,32 @@ class SwpmStripeSCASubscriptionIpnHandler {
 		try {
 			\Stripe\Stripe::setApiKey( $api_keys['secret'] );
 
-			$events = \Stripe\Event::all(
-				array(
-					'type'    => 'checkout.session.completed',
-					'created' => array(
-						'gte' => time() - 60 * 60,
-					),
-				)
-			);
-
 			$sess = false;
 
-			foreach ( $events->autoPagingIterator() as $event ) {
-				$session = $event->data->object;
-				if ( isset( $session->client_reference_id ) && $session->client_reference_id === $ref_id ) {
+			if ( ! empty( $session_id ) ) {
+				//Retrieve the checkout session using the session ID from the return URL.
+				$session = \Stripe\Checkout\Session::retrieve( $session_id );
+				if ( isset( $session->client_reference_id ) && $session->client_reference_id === $ref_id && isset( $session->status ) && $session->status === 'complete' ) {
 					$sess = $session;
-					break;
+				}
+			} else {
+				//Return URL without the session ID (a checkout started before the session ID was added to the return URL).
+				//Find the session in the completed checkout sessions of the last hour.
+				$events = \Stripe\Event::all(
+					array(
+						'type'    => 'checkout.session.completed',
+						'created' => array(
+							'gte' => time() - 60 * 60,
+						),
+					)
+				);
+
+				foreach ( $events->autoPagingIterator() as $event ) {
+					$session = $event->data->object;
+					if ( isset( $session->client_reference_id ) && $session->client_reference_id === $ref_id ) {
+						$sess = $session;
+						break;
+					}
 				}
 			}
 
@@ -94,6 +105,13 @@ class SwpmStripeSCASubscriptionIpnHandler {
 				SwpmLog::log_simple_debug( $error_msg, false );
 				wp_die( esc_html( $error_msg ) );
 				return;
+			}
+
+			//Check if the return URL is opened in the browser that started the checkout.
+			require_once SIMPLE_WP_MEMBERSHIP_PATH . 'lib/stripe-util-functions.php';
+			$is_checkout_browser = StripeUtilFunctions::is_checkout_from_this_browser( $sess->client_reference_id, $button_id );
+			if ( ! $is_checkout_browser ) {
+				SwpmLog::log_simple_debug( 'The return URL was not opened in the browser that started the checkout. The payment will be processed, but it will not be applied to the logged-in account (if any) and the paid registration link will not be shown.', true );
 			}
 
 			$sub_id = isset( $sess->subscription ) ? $sess->subscription : '';
@@ -158,11 +176,16 @@ class SwpmStripeSCASubscriptionIpnHandler {
 		$stripe_email = $customer->email;
 
 		$user_ip = SwpmUtils::get_user_ip_address();
+		if ( ! $is_checkout_browser ) {
+			//Not the browser that started the checkout. Use the buyer's IP address saved with the session (the IP address is used to show the paid registration link).
+			$user_ip = isset( $sess->metadata->swpm_user_ip ) ? sanitize_text_field( $sess->metadata->swpm_user_ip ) : '';
+		}
 
 		//Custom field data
 		$custom_field_value  = 'subsc_ref=' . $membership_level_id;
 		$custom_field_value .= '&user_ip=' . $user_ip;
-		if ( SwpmMemberUtils::is_member_logged_in() ) {
+		if ( $is_checkout_browser && SwpmMemberUtils::is_member_logged_in() ) {
+			//Apply the payment to the logged-in account (only in the browser that started the checkout).
 			$custom_field_value .= '&swpm_id=' . SwpmMemberUtils::get_logged_in_members_id();
 		}
 		$custom_field_value = apply_filters( 'swpm_custom_field_value_filter', $custom_field_value );
@@ -204,6 +227,17 @@ class SwpmStripeSCASubscriptionIpnHandler {
 		$ipn_data['txn_type']		  = 'stripe_subscription_new';//Can be used to find sub-created type transactions.
 		$ipn_data['status']           = 'subscription created';
 
+		//Trial info of this checkout (saved on the subscription agreement record). The trial of this checkout (trial_period_days) is free.
+		//A trial that starts with the subscription is the checkout's trial. A trial added later doesn't tell if the checkout had one, so nothing is set.
+		//Missing fields in the subscription data leave it unknown.
+		$sub_fields = $sub->toArray();
+		if ( array_key_exists( 'trial_start', $sub_fields ) && empty( $sub_fields['trial_start'] ) ) {
+			$ipn_data['is_trial_txn'] = 'no';
+		} elseif ( ! empty( $sub_fields['trial_start'] ) && ! empty( $sub_fields['start_date'] ) && (int) $sub_fields['trial_start'] === (int) $sub_fields['start_date'] ) {
+			$ipn_data['is_trial_txn'] = 'yes';
+			$ipn_data['trial_amount'] = '0';
+		}
+
 		$bd_addr = $pm->billing_details->address;
 
 		$ipn_data['address_street']  = isset( $bd_addr->line1 ) ? $bd_addr->line1 : '';
@@ -225,9 +259,17 @@ class SwpmStripeSCASubscriptionIpnHandler {
 		// Handle the membership signup related tasks.
 		swpm_handle_subsc_signup_stand_alone( $ipn_data, $membership_level_id, $txn_id, $swpm_id );
 
+		// For a new member: only show the paid registration link to the browser that made the payment (the member also gets it by email).
+		if ( ! empty( $ipn_data['member_id'] ) ) {
+			SwpmUtils::set_paid_registration_link_browser_only( $ipn_data['member_id'], $is_checkout_browser );
+		}
+
 		// Save the transaction record
 		SwpmTransactions::save_txn_record( $ipn_data );
 		SwpmLog::log_simple_debug( 'Transaction data saved.', true );
+
+		// Save the first payment (charge) of the subscription as its own transaction record (the record above is the subscription agreement).
+		self::save_first_payment_record( $sub, $ipn_data );
 
 		// Trigger the stripe IPN processed action hook (so other plugins can can listen for this event).
 		do_action( 'swpm_stripe_sca_ipn_processed', $ipn_data );
@@ -236,8 +278,106 @@ class SwpmStripeSCASubscriptionIpnHandler {
 
 		SwpmLog::log_simple_debug( 'End of Stripe SCA Subscription IPN processing.', true, true );
 
+		if ( ! $is_checkout_browser ) {
+			//Not the browser that started the checkout. Don't redirect to the paid registration link (the member gets it by email). Redirect to the return URL.
+			$return_url = get_post_meta( $button_id, 'return_url', true );
+			if ( empty( $return_url ) ) {
+				$return_url = SIMPLE_WP_MEMBERSHIP_SITE_HOME_URL;
+			}
+			SwpmMiscUtils::redirect_to_url( $return_url );
+			return;
+		}
+
 		// Redirect the user to the registration URL or return URL (or to the homepage if a return URL is not specified for this payment button).
 		SwpmMiscUtils::handle_after_payment_redirect( $button_id );
+	}
+
+	/*
+	 * Saves the first payment (charge) of a new subscription as its own transaction record, with the charge ID as the transaction ID.
+	 * This way every subscription charge has a payment record (the renewal payments are saved by the webhook handler). It also lets a refund of the first charge find its record.
+	 * It is skipped (nothing is saved) when there is no charge for the first invoice (example: a free trial) or the invoice details can't be retrieved.
+	 */
+	public static function save_first_payment_record( $sub, $ipn_data ) {
+		$invoice_id = isset( $sub->latest_invoice ) ? $sub->latest_invoice : '';
+		if ( is_object( $invoice_id ) ) {
+			$invoice_id = isset( $invoice_id->id ) ? $invoice_id->id : '';
+		}
+		if ( empty( $invoice_id ) ) {
+			SwpmLog::log_simple_debug( 'Stripe subscription first payment: the subscription has no invoice ID. The first payment record will not be saved.', true );
+			return;
+		}
+
+		try {
+			//Use the same API version as the webhook handler, so the invoice has the same structure (the charge ID is in the payment intent of the invoice payment).
+			$invoice = \Stripe\Invoice::retrieve(
+				array(
+					'id'     => $invoice_id,
+					'expand' => array( 'payments.data.payment.payment_intent' ),
+				),
+				array( 'stripe_version' => '2026-07-29.dahlia' )
+			);
+		} catch ( \Exception $e ) {
+			SwpmLog::log_simple_debug( 'Stripe subscription first payment: could not retrieve the invoice (' . $invoice_id . '). The first payment record will not be saved. ' . $e->getMessage(), false );
+			return;
+		}
+
+		$amount_paid = isset( $invoice->amount_paid ) ? (int) $invoice->amount_paid : 0;
+		if ( ! isset( $invoice->status ) || 'paid' !== $invoice->status || $amount_paid <= 0 ) {
+			//Example: a free trial or a 100% discount. There is no charge for the first invoice.
+			SwpmLog::log_simple_debug( 'Stripe subscription first payment: no charge for the first invoice (' . $invoice_id . '). The first payment record will not be saved.', true );
+			return;
+		}
+
+		//Get the charge ID of the invoice payment.
+		$charge_id = '';
+		if ( isset( $invoice->charge ) && is_string( $invoice->charge ) ) {
+			// In old api version, the charge id used to be directly available on the invoice object.
+			$charge_id = $invoice->charge;
+		} else if ( isset( $invoice->payments->data ) ) {
+			foreach ( $invoice->payments->data as $invoice_payment ) {
+				if ( ! isset( $invoice_payment->status ) || 'paid' !== $invoice_payment->status ) {
+					continue;
+				}
+				if ( isset( $invoice_payment->payment->payment_intent->latest_charge ) ) {
+					$charge_id = $invoice_payment->payment->payment_intent->latest_charge;
+				} else if ( isset( $invoice_payment->payment->charge ) ) {
+					$charge_id = $invoice_payment->payment->charge;
+				}
+				break;
+			}
+		}
+		if ( is_object( $charge_id ) ) {
+			$charge_id = isset( $charge_id->id ) ? $charge_id->id : '';
+		}
+		if ( empty( $charge_id ) ) {
+			SwpmLog::log_simple_debug( 'Stripe subscription first payment: could not find the charge ID of the invoice (' . $invoice_id . '). The first payment record will not be saved.', false );
+			return;
+		}
+
+		//Check if this charge has already been saved.
+		if ( SwpmTransactions::get_transaction_row_by_txn_id( $charge_id ) ) {
+			SwpmLog::log_simple_debug( 'Stripe subscription first payment: a transaction record already exists for the charge ID: ' . $charge_id, true );
+			return;
+		}
+
+		//The amount that was charged.
+		$currency_code = isset( $invoice->currency ) ? strtoupper( $invoice->currency ) : '';
+		$zero_cents    = unserialize( SIMPLE_WP_MEMBERSHIP_STRIPE_ZERO_CENTS );
+		if ( in_array( $currency_code, $zero_cents, true ) ) {
+			$payment_amount = $amount_paid;
+		} else {
+			$payment_amount = $amount_paid / 100;
+		}
+
+		//Same data as the subscription agreement record, with the details of this payment.
+		$payment_ipn_data             = $ipn_data;
+		$payment_ipn_data['txn_id']   = $charge_id;
+		$payment_ipn_data['mc_gross'] = floatval( $payment_amount );
+		$payment_ipn_data['txn_type'] = 'stripe_subscription_first_payment';
+		$payment_ipn_data['status']   = 'subscription';//Same status as the renewal payments of the subscription.
+
+		SwpmTransactions::save_txn_record( $payment_ipn_data );
+		SwpmLog::log_simple_debug( 'Stripe subscription first payment record saved. Charge ID: ' . $charge_id . ', Subscription ID: ' . $payment_ipn_data['subscr_id'], true );
 	}
 }
 

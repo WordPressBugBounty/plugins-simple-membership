@@ -50,7 +50,7 @@ class SwpmTransactions {
 		$txn_data['txn_id']         = $ipn_data['txn_id'];
 		$txn_data['subscr_id']      = $subscr_id;
 		$txn_data['reference']      = isset( $custom_var['reference'] ) ? $custom_var['reference'] : '';
-		$txn_data['payment_amount'] = $ipn_data['mc_gross'];
+		$txn_data['payment_amount'] = isset($ipn_data['payment_amount']) ? $ipn_data['payment_amount'] : $ipn_data['mc_gross'];
 		$txn_data['gateway']        = isset($ipn_data['gateway']) ? $ipn_data['gateway'] : '';
 		$txn_data['status']         = isset($ipn_data['status']) ? $ipn_data['status'] : '';
 
@@ -81,8 +81,14 @@ class SwpmTransactions {
 
 		//Save additional data based on the checkout gateway.
 		if( isset( $ipn_data['gateway'])) {
+			//The txn_type values of the subscription agreement record (the "subscription created" record of a new subscription checkout).
+			//The payments of a subscription (example: renewal payments) are saved with the same gateway, but a different txn_type.
+			$sub_agreement_txn_types = array( 'stripe_subscription_new', 'pp_subscription_new', 'pp_std_subscription_new' );
+			$is_sub_agreement_record = isset( $ipn_data['txn_type'] ) && in_array( $ipn_data['txn_type'], $sub_agreement_txn_types, true );
+
 			//Check if this is a PayPal std subscription, or PayPal PPCP subscription, or a Stripe subscription checkout.
-			if ( $ipn_data['gateway'] == 'paypal_subscription_checkout' || $ipn_data['gateway'] == 'stripe-sca-subs' || $ipn_data['gateway'] == 'paypal_std_sub_checkout' ) {
+			//Only for the subscription agreement record, so the orig_swpm_txn_cpt_id of the member keeps pointing to it (until the member does a new subscription checkout).
+			if ( $is_sub_agreement_record && ( $ipn_data['gateway'] == 'paypal_subscription_checkout' || $ipn_data['gateway'] == 'stripe-sca-subs' || $ipn_data['gateway'] == 'paypal_std_sub_checkout' ) ) {
 				//Save the swpm_transactions CPT post ID of the original checkout in the member's proifle. Useful to retreive some of the original checkout txn data (example: custom_field data).
 				$member_record = SwpmMemberUtils::get_user_by_subsriber_id( $subscr_id );
 				if( ! $member_record ){
@@ -134,6 +140,25 @@ class SwpmTransactions {
         //Save the $txn_data to the swpm_transactions CPT as post meta.
 		foreach ( $txn_data as $key => $value ) {
 			update_post_meta( $post_id, $key, $value );
+		}
+
+		//Save the trial info of the subscription checkout on the subscription agreement record.
+		//is_trial_txn: 'yes' or 'no' (not saved when unknown). trial_amount: the price of the trial (example: '0' or '0.00' for a free trial), only when is_trial_txn is 'yes'.
+		//Saved here, not with $txn_data, because array_filter() can remove a zero amount.
+		//Not for the PayPal subscription checkout (pp_subscription_new): its trial flag comes from the data sent by the browser.
+		$trial_info_txn_types = array( 'stripe_subscription_new', 'pp_std_subscription_new' );
+		if ( isset( $ipn_data['txn_type'] ) && in_array( $ipn_data['txn_type'], $trial_info_txn_types, true ) ) {
+			$is_trial_txn = isset( $ipn_data['is_trial_txn'] ) ? $ipn_data['is_trial_txn'] : '';
+			if ( $is_trial_txn === 'yes' || $is_trial_txn === 'no' ) {
+				update_post_meta( $post_id, 'is_trial_txn', $is_trial_txn );
+			}
+			if ( $is_trial_txn === 'yes' && isset( $ipn_data['trial_amount'] ) ) {
+				if ( is_numeric( $ipn_data['trial_amount'] ) && $ipn_data['trial_amount'] >= 0 ) {
+					update_post_meta( $post_id, 'trial_amount', (string) $ipn_data['trial_amount'] );
+				} else {
+					SwpmLog::log_simple_debug( 'The trial amount is not valid. It is not saved. Value: ' . $ipn_data['trial_amount'], false );
+				}
+			}
 		}
 
         //Trigger the action hook.
