@@ -400,6 +400,12 @@ function swpm_save_payment_refund( $txn_db_row, $refund ) {
 			}
 		}
 
+		// The same for a PayPal subscription (PPCP): the checkout hooks used the order ID of the agreement record.
+		// Only for the payment made at checkout (the first payment of the subscription, not the first payment after a free trial).
+		if ( 'pp_subscription_sale_completed_webhook' === get_post_meta( $txn_db_row->id, 'txn_type', true ) && ! empty( $txn_db_row->subscr_id ) ) {
+			$refund['checkout_txn_id'] = SWPM_PayPal_Utility_Functions::get_checkout_txn_id_if_first_sale( $txn_db_row );
+		}
+
 		// Full or partial: what the gateway says, otherwise the total refunded compared with the amount paid (full if not known).
 		$paid = is_numeric( $refund['payment_amount'] ) ? round( (float) $refund['payment_amount'], 2 ) : 0;
 		if ( null === $refund['is_full_refund'] ) {
@@ -471,9 +477,10 @@ function swpm_trigger_payment_refunded_action( $refund_data ) {
 	 *     @type int    $txn_record_id  ID of the transaction record (0 if none was found).
 	 *     @type string $member_id      ID of the member account (empty if not found).
 	 *     @type string $subscr_id      Subscription ID, when known (for one-time payments, usually the transaction ID; can be empty).
-	 *     @type string $checkout_txn_id Only for the first payment of a Stripe subscription: the transaction ID that the checkout
-	 *                                  hooks (example: swpm_payment_ipn_processed) used for this payment (the customer ID).
-	 *                                  Empty otherwise.
+	 *     @type string $checkout_txn_id Only for the payment made at the checkout of a subscription: the transaction ID that the
+	 *                                  checkout hooks (example: swpm_payment_ipn_processed) used for this payment. Stripe: the
+	 *                                  first payment (the customer ID). PayPal subscription (PPCP): the first payment, when it
+	 *                                  was paid at checkout (the order ID). Empty otherwise.
 	 * }
 	 */
 	do_action( 'swpm_payment_refunded', $refund_data );
@@ -790,7 +797,9 @@ function swpm_send_subscription_renewal_notification_email( $member_id, $ipn_dat
 		//PayPal also sends its first payment through the shared recurring-payment handler.
 		$previous = SwpmTransactions::get_transaction_row_by_subscr_id( $subscription_id, true );
 		$created_statuses = array( 'subscription created', strtolower( __( 'subscription created', 'simple-membership' ) ) );
-		if ( empty( $previous ) || in_array( strtolower( $previous->status ?? '' ), $created_statuses, true ) ) {
+		//The txn_type is also checked, in case the site language changed since the agreement record was saved.
+		$agreement_txn_types = array( 'pp_subscription_new', 'pp_std_subscription_new' );
+		if ( empty( $previous ) || in_array( strtolower( $previous->status ?? '' ), $created_statuses, true ) || in_array( $previous->txn_type ?? '', $agreement_txn_types, true ) ) {
 			return;
 		}
 	} elseif ( $txn_type !== 'recurring_payment' ) {
@@ -910,7 +919,9 @@ function swpm_is_paypal_recurring_payment($payment_data){
         swpm_debug_log_subsc('Is recurring payment check debug data: ' . $item_number . "|" . $subscr_id, true);
 
         $result = SwpmTransactions::get_transaction_row_by_subscr_id($subscr_id, true);
-        if (isset($result) && strtolower($result->status) != 'subscription created') {
+        //The subscription agreement record is not a payment. Its status is saved translated, so the txn_type is checked too.
+        $is_sub_agreement_record = isset($result) && ( strtolower($result->status) == 'subscription created' || ( isset($result->txn_type) && $result->txn_type == 'pp_std_subscription_new' ) );
+        if (isset($result) && !$is_sub_agreement_record) {
             swpm_debug_log_subsc('This subscr_id exists in the transactions db. Recurring payment check flag value is true.', true);
             $recurring_payment = true;
             return $recurring_payment;

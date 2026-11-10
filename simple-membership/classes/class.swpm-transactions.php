@@ -145,8 +145,7 @@ class SwpmTransactions {
 		//Save the trial info of the subscription checkout on the subscription agreement record.
 		//is_trial_txn: 'yes' or 'no' (not saved when unknown). trial_amount: the price of the trial (example: '0' or '0.00' for a free trial), only when is_trial_txn is 'yes'.
 		//Saved here, not with $txn_data, because array_filter() can remove a zero amount.
-		//Not for the PayPal subscription checkout (pp_subscription_new): its trial flag comes from the data sent by the browser.
-		$trial_info_txn_types = array( 'stripe_subscription_new', 'pp_std_subscription_new' );
+		$trial_info_txn_types = array( 'stripe_subscription_new', 'pp_std_subscription_new', 'pp_subscription_new' );
 		if ( isset( $ipn_data['txn_type'] ) && in_array( $ipn_data['txn_type'], $trial_info_txn_types, true ) ) {
 			$is_trial_txn = isset( $ipn_data['is_trial_txn'] ) ? $ipn_data['is_trial_txn'] : '';
 			if ( $is_trial_txn === 'yes' || $is_trial_txn === 'no' ) {
@@ -432,6 +431,7 @@ class SwpmTransactions {
             'payment_amount' => get_post_meta($post_id, 'payment_amount', true),
             'gateway' => get_post_meta($post_id, 'gateway', true),
             'status' => get_post_meta($post_id, 'status', true),
+            'txn_type' => get_post_meta($post_id, 'txn_type', true),
             'subscr_status' => get_post_meta($post_id, 'subscr_status', true), // For subscription type transactions only.
             'ip_address' => get_post_meta($post_id, 'ip_address', true),
             'payment_button_id' => get_post_meta($post_id, 'payment_button_id', true),

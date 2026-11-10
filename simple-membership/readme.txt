@@ -5,7 +5,7 @@ Tags: member, members, members only, membership, memberships, register, WordPres
 Requires at least: 6.0
 Requires PHP: 7.4
 Tested up to: 7.1
-Stable tag: 4.8.7
+Stable tag: 4.8.8
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -192,6 +192,19 @@ You can find the full documentation for this plugin on the [Simple Membership pl
 5. Example of membership level management.
 
 == Changelog ==
+
+= 4.8.8 =
+- Fixed comment protection not applying to the Comment Content block in block themes (for example, Twenty Twenty-Five).
+- The trial info of a new subscription (trial or not, and the trial amount) is now also saved on the subscription agreement record for the PayPal (PPCP) subscription checkout. It uses the subscription data from the PayPal API.
+- Stripe: a subscription renewal payment notification for a subscription that was not created on this site is now ignored (for example, when two sites use the same Stripe account). It no longer saves a payment record without a member. Added the swpm_stripe_webhook_skip_unknown_subscription filter hook to turn this check off.
+- Fixed an issue where deleting a payment record from the payments menu did not delete its row in the old payments database table.
+- PayPal subscriptions (PPCP): for a refund of the payment made at checkout, the swpm_payment_refunded action data now also includes the checkout's transaction ID (checkout_txn_id, the order ID), the same as for Stripe subscriptions.
+- Fixed an issue where a PayPal subscription agreement record was not recognized on sites where its 'subscription created' status is saved translated (for example, in the cancel subscription shortcode, the subscription status updates and the transaction details page in admin). For a PayPal Standard subscription with a paid trial, this could also cause the trial payment to be rejected as an amount mismatch.
+- Improvement: the debug log files are now saved in a "logs" folder of the plugin that blocks direct access (on Apache/LiteSpeed servers), and their file names now use a longer random suffix that is hard to guess. Existing sites get new log file names.
+- The country list now has one source: SwpmMiscUtils::get_raw_countries_list() returns the unfiltered country code => country name map used by country-code conversion and the default dropdown list. The swpm_countries_list filter still customizes the dropdown without affecting PayPal or Stripe country-code conversion. Payment-created members now use the default dropdown names (for example, 'United States of America' instead of 'United States').
+- Added 19 territories to the countries dropdown (for example, Puerto Rico, Guam and Bermuda) and fixed the spelling of Nepal. Removed 'Swaziland', which was listed twice along with 'Eswatini'.
+- Fixed an issue where each save of a membership level added duplicate rows for its settings in the membership level meta table. Saving a level now keeps one row per setting and removes any older copies for that level.
+- Thanks to Th0masL for contributing the subscription trial info, refund and PayPal subscription changes in this release.
 
 = 4.8.7 =
 - Stripe subscriptions: the first payment of a new subscription is now also saved as its own payment record (with the charge ID), in addition to the "subscription created" record. Every subscription charge now has a payment record, and a refund of the first payment can find its record. For a refund of this first payment, the swpm_payment_refunded action data also includes the checkout's transaction ID (checkout_txn_id).
