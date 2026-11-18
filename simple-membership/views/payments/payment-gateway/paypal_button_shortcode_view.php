@@ -1,4 +1,8 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 
 /* * ************************************************
  * PayPal Buy Now button shortcode handler
@@ -71,7 +75,7 @@ function swpm_render_pp_buy_now_button_sc_output($button_code, $args) {
         $action_url='https://www.paypal.com/cgi-bin/webscr';
     }
 
-    $output.= '<form id="swpm-paypal-payment-form-'.$uniqid.'" action="'.$action_url.'" method="post" '.$window_target.'>';
+    $output.= '<form id="swpm-paypal-payment-form-'.$uniqid.'" class="swpm-pp-std-checkout-form" action="'.$action_url.'" method="post" '.$window_target.'>';
 
     $output .= '<input type="hidden" name="cmd" value="_xclick" />';
     $output .= '<input type="hidden" name="charset" value="utf-8" />';
@@ -108,13 +112,25 @@ function swpm_render_pp_buy_now_button_sc_output($button_code, $args) {
     }
 
     $output .= '</form>'; //End .form
+    $output .= swpm_pp_std_checkout_token_script();
     $output .= '</div>'; //End .swpm_button_wrapper
 
     return $output;
 }
 
+/*
+ * Loads the script that creates a checkout token when a PayPal Standard button is clicked (see js/swpm-pp-std-checkout-token.js).
+ * The IPN saves the token's hash on the new member, so the thank you page only shows the paid registration link in the browser that made the payment.
+ * The script is enqueued (not printed in the shortcode output), so content filters can't change it (example: '&&' converted to '&#038;&#038;').
+ * Returns an empty string (it is appended to the button output).
+ */
+function swpm_pp_std_checkout_token_script() {
+    wp_enqueue_script( 'swpm-pp-std-checkout-token', SIMPLE_WP_MEMBERSHIP_URL . '/js/swpm-pp-std-checkout-token.js', array(), SIMPLE_WP_MEMBERSHIP_VER, true );
+    return '';
+}
+
 /* * ************************************************
- * PayPal subscription button shortcode handler 
+ * PayPal subscription button shortcode handler
  * *********************************************** */
 add_filter('swpm_payment_button_shortcode_for_pp_subscription', 'swpm_render_pp_subscription_button_sc_output', 10, 2);
 
@@ -188,9 +204,9 @@ function swpm_render_pp_subscription_button_sc_output($button_code, $args) {
     $output = '';
     $output .= '<div class="swpm-button-wrapper swpm-pp-subscription-wrapper">';
     if ($sandbox_enabled) {
-        $output .= '<form action="https://www.sandbox.paypal.com/cgi-bin/webscr" method="post" ' . $window_target . '>';
+        $output .= '<form class="swpm-pp-std-checkout-form" action="https://www.sandbox.paypal.com/cgi-bin/webscr" method="post" ' . $window_target . '>';
     } else {
-        $output .= '<form action="https://www.paypal.com/cgi-bin/webscr" method="post" ' . $window_target . '>';
+        $output .= '<form class="swpm-pp-std-checkout-form" action="https://www.paypal.com/cgi-bin/webscr" method="post" ' . $window_target . '>';
     }
 
     $output .= '<input type="hidden" name="cmd" value="_xclick-subscriptions" />';
@@ -247,6 +263,7 @@ function swpm_render_pp_subscription_button_sc_output($button_code, $args) {
     }
 
     $output .= '</form>'; //End .form
+    $output .= swpm_pp_std_checkout_token_script();
     $output .= '</div>'; //End .swpm_button_wrapper
 
     return $output;

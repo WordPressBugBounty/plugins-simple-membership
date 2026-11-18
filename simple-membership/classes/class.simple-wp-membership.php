@@ -1,6 +1,10 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
 
 include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-utils-misc.php');
+include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-utils-kses.php');
 include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-utils.php');
 include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-utils-member.php');
 include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'classes/class.swpm-utils-membership-level.php');
@@ -320,7 +324,7 @@ class SimpleWpMembership {
                     //This is a non-admin user. Do not show the wp dashboard.
                     $message = '<p>' . SwpmUtils::_('The admin of this site does not allow users to access the wp dashboard.') . '</p>';
                     $message .= '<p>' . SwpmUtils::_('Go back to the home page by ') . '<a href="' . SIMPLE_WP_MEMBERSHIP_SITE_HOME_URL . '">' . SwpmUtils::_('clicking here') . '</a>.' . '</p>';
-                    wp_die($message);
+                    wp_die( wp_kses_post( $message ));
                 }
             }
         }
@@ -425,7 +429,7 @@ class SimpleWpMembership {
                     $error_msg .= "<br /><br />" . SwpmUtils::_("Contact the site admin and request them to check your username in the WP Users menu to see what happened with the WP user entry of your account.");
                     $error_msg .= "<br /><br />" . SwpmUtils::_("The site admin can disable the Force WP User Synchronization feature in the settings to disable this feature and this error will go away.");
                     $error_msg .= "<br /><br />" . SwpmUtils::_("You can use the back button of your browser to go back to the site.");
-                    wp_die($error_msg);
+                    wp_die( wp_kses_post( $error_msg ));
                 }
             }
         }
@@ -565,6 +569,11 @@ class SimpleWpMembership {
             return;
         }
 
+        //The plugin is updating the WP user with the data it has already saved in the member record (example: a password reset). Nothing to sync.
+        if ( SwpmUtils::$is_updating_wp_user ) {
+            return;
+        }
+
         //Trigger a filter hook to allow any addon(s) to override the wp profile_update hook handling.
         $overriden_msg = apply_filters('swpm_wp_profile_update_hook_override', '');
         if( !empty( $overriden_msg ) ){
@@ -576,8 +585,16 @@ class SimpleWpMembership {
         //Retrieve the SWPM user profile for the given WP user ID.
         global $wpdb;
         $wp_user_data = get_userdata($wp_user_id);
-        $query = $wpdb->prepare("SELECT * FROM " . $wpdb->prefix . "swpm_members_tbl WHERE " . ' user_name=%s', $wp_user_data->user_login);
-        $profile = $wpdb->get_row($query, ARRAY_A);
+
+        //Read the values WordPress has saved directly from the database (WordPress saves the user row and the name meta before this hook).
+        //The hook's $userdata is the raw input (slashed, before WordPress's filters), and get_userdata() can return the old data on some sites (example: a persistent object cache).
+        $saved_user = $wpdb->get_row( $wpdb->prepare( "SELECT user_login, user_email, user_pass FROM {$wpdb->users} WHERE ID = %d", $wp_user_id ) );
+        $saved_meta = $wpdb->get_results( $wpdb->prepare( "SELECT meta_key, meta_value FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key IN ('first_name', 'last_name')", $wp_user_id ), OBJECT_K );
+        if ( empty( $saved_user ) || empty( $wp_user_data ) ) {
+            return;
+        }
+
+        $profile = $wpdb->get_row($wpdb->prepare("SELECT * FROM " . $wpdb->prefix . "swpm_members_tbl WHERE " . ' user_name=%s', $saved_user->user_login), ARRAY_A);
         $profile = (array) $profile;
         if ( empty($profile) ) {
             //No SWPM user found for this WP user. Nothing to do.
@@ -589,13 +606,16 @@ class SimpleWpMembership {
         //SwpmLog::log_array_data_to_debug($wp_user_data, true);
         //SwpmLog::log_array_data_to_debug($userdata, true);
 
-        //Update the SWPM user profile with the latest WP user data that we received via the 'profile_update' action hook.  
-        $profile['user_name'] = $wp_user_data->user_login;
-        $profile['email'] = $wp_user_data->user_email;
-        $profile['first_name'] = $wp_user_data->user_firstname;
-        $profile['last_name'] = $wp_user_data->user_lastname;
-        $profile['password'] = $wp_user_data->user_pass;
-        $wpdb->update($wpdb->prefix . "swpm_members_tbl", $profile, array('member_id' => $profile['member_id']));
+        //Update the SWPM user profile with the latest WP user data that we received via the 'profile_update' action hook.
+        //Only the synced columns are updated (not the whole row, so other columns changed in the meantime are not overwritten).
+        $profile_data = array(
+            'user_name'  => $saved_user->user_login,
+            'email'      => $saved_user->user_email,
+            'first_name' => isset( $saved_meta['first_name'] ) ? $saved_meta['first_name']->meta_value : $wp_user_data->user_firstname,
+            'last_name'  => isset( $saved_meta['last_name'] ) ? $saved_meta['last_name']->meta_value : $wp_user_data->user_lastname,
+            'password'   => $saved_user->user_pass,
+        );
+        $wpdb->update($wpdb->prefix . "swpm_members_tbl", $profile_data, array('member_id' => $profile['member_id']));
 
         //===============/
         //TODO - Only reset SWPM auth cookies only since this is an update from WP end. WP will handle their cookie reset. 
@@ -690,7 +710,7 @@ class SimpleWpMembership {
             $succeeded = true;
         }
 
-        echo $output;
+        echo wp_kses_post($output);
         return $succeeded;
     }
 
@@ -715,21 +735,23 @@ class SimpleWpMembership {
 
             if (!empty($msg)) {//Show warning messages if any.
                 echo '<div id="message" class="notice notice-warning">';
-                echo $msg;
+                echo wp_kses_post( $msg );
                 echo '</div>';
             }
         }
 
         if (SwpmMiscUtils::check_if_webhook_signing_key_config_required() == 'yes') {
             echo '<div class="notice notice-error"><p>';
-            _e("Looks like you are using Stripe subscription payments, but the webhook signing secret is missing from the plugin settings. Please go to the <a href='admin.php?page=simple_wp_membership_payments&tab=payment_settings&subtab=ps_stripe'>Stripe Settings</a> menu and configure the webhook signing secret.", "simple-membership"); 
+            echo wp_kses_post( __( "Looks like you are using Stripe subscription payments, but the webhook signing secret is missing from the plugin settings. Please go to the <a href='admin.php?page=simple_wp_membership_payments&tab=payment_settings&subtab=ps_stripe'>Stripe Settings</a> menu and configure the webhook signing secret.", 'simple-membership' ) ); 
             echo '</p></div>';
         }
 
 		$swpm_stripe_received_api_old_version = get_option('swpm_stripe_received_api_old_version', false);
 	    if (!empty($swpm_stripe_received_api_old_version)) {
 		    echo '<div class="notice notice-warning is-dismissible" id="swpm_stripe_api_old_version_notice"><p>';
-			printf(__("This site received a Stripe subscription webhook using an outdated API version '%s'. Upgrade your Stripe API version from your Stripe account dashboard, then dismiss this message.", 'simple-membership'), esc_attr($swpm_stripe_received_api_old_version));
+			printf(
+                /* translators: %s: Stripe API version received in a webhook. */
+                esc_html__( "This site received a Stripe subscription webhook using an outdated API version '%s'. Upgrade your Stripe API version from your Stripe account dashboard, then dismiss this message.", 'simple-membership' ), esc_attr($swpm_stripe_received_api_old_version));
 		    echo '</p></div>';
 	    }
     }
@@ -750,7 +772,7 @@ class SimpleWpMembership {
         echo '<div class="dbx-b-ox-wrapper">' . "\n";
         echo '<fieldset id="swpm_fieldsetid" class="dbx-box">' . "\n";
         echo '<div class="dbx-h-andle-wrapper"><h3 class="dbx-handle">' .
-        __('Simple Membership Protection options', 'simple-membership') . "</h3></div>";
+        esc_html__( 'Simple Membership Protection options', 'simple-membership' ) . "</h3></div>";
         echo '<div class="dbx-c-ontent-wrapper"><div class="dbx-content">';
         // output editing form
         $this->inner_custom_box();
@@ -775,17 +797,17 @@ class SimpleWpMembership {
         }
 
 		//Nonce input
-        echo '<input type="hidden" name="swpm_post_protection_box_nonce" value="' . wp_create_nonce('swpm_post_protection_box_nonce_action') . '" />';
+        echo '<input type="hidden" name="swpm_post_protection_box_nonce" value="' . esc_attr( wp_create_nonce('swpm_post_protection_box_nonce_action') ) . '" />';
 
         // The actual fields for data entry
-        echo '<h4>' . __("Do you want to protect this content?", 'simple-membership') . '</h4>';
-        echo '<input type="radio" ' . ((!$is_protected) ? 'checked' : "") . '  name="swpm_protect_post" value="1" /> ' . __('No, Do not protect this content.', 'simple-membership') . '<br/>';
-        echo '<input type="radio" ' . (($is_protected) ? 'checked' : "") . '  name="swpm_protect_post" value="2" /> ' . __('Yes, Protect this content.', 'simple-membership') . '<br/>';
-        echo $protection_obj->get_last_message();
+        echo '<h4>' . esc_html__( "Do you want to protect this content?", 'simple-membership' ) . '</h4>';
+        echo '<input type="radio" ' . ((!$is_protected) ? 'checked' : "") . '  name="swpm_protect_post" value="1" /> ' . esc_html__( 'No, Do not protect this content.', 'simple-membership' ) . '<br/>';
+        echo '<input type="radio" ' . (($is_protected) ? 'checked' : "") . '  name="swpm_protect_post" value="2" /> ' . esc_html__( 'Yes, Protect this content.', 'simple-membership' ) . '<br/>';
+        echo $protection_obj->get_last_message(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Output is pre-escaped or trusted HTML built internally or by filters.
 
-        echo '<h4>' . __("Select the membership level that can access this content:", 'simple-membership') . "</h4>";
-        $query = "SELECT * FROM " . $wpdb->prefix . "swpm_membership_tbl WHERE  id !=1 ";
-        $levels = $wpdb->get_results($query, ARRAY_A);
+        echo '<h4>' . esc_html__( "Select the membership level that can access this content:", 'simple-membership' ) . "</h4>";
+        
+        $levels = $wpdb->get_results("SELECT * FROM " . $wpdb->prefix . "swpm_membership_tbl WHERE  id !=1 ", ARRAY_A);
         foreach ($levels as $level) {
 			$is_checked = SwpmPermission::get_instance( $level['id'] )->is_permitted($id);
 
@@ -795,7 +817,7 @@ class SimpleWpMembership {
 			}
 
             echo '<input type="checkbox" ' . ($is_checked ? "checked='checked'" : "") .
-            ' name="swpm_protection_level[' . $level['id'] . ']" value="' . $level['id'] . '" /> ' . $level['alias'] . "<br/>";
+            ' name="swpm_protection_level[' . esc_attr( $level['id'] ) . ']" value="' . esc_attr( $level['id'] ) . '" /> ' . esc_html( $level['alias'] ) . "<br/>";
         }
     }
 
@@ -846,7 +868,7 @@ class SimpleWpMembership {
             }
             SwpmProtection::get_instance()->save();
             $query = "SELECT id FROM " . $wpdb->prefix . "swpm_membership_tbl WHERE  id !=1 ";
-            $level_ids = $wpdb->get_col($query);
+            $level_ids = $wpdb->get_col($query); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Query is built with prepared/sanitized parts.
             foreach ($level_ids as $level) {
                 if (isset($swpm_protection_level[$level])) {
                     //Apply the post ID to the protection list and then save it in the database.

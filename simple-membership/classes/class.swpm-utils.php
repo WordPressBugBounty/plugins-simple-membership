@@ -1,4 +1,8 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 
 abstract class SwpmUtils {
 
@@ -88,7 +92,7 @@ abstract class SwpmUtils {
 				return;
 			}else{
 				//This is getting called from the front-end side (example: at member login time). So we need to show a critical error message to the member and end the script.
-            	wp_die($critical_error_msg);
+            	wp_die( wp_kses_post( $critical_error_msg ));
 				//The script will die here. So the rest of the code will not be executed.
 			}
         }
@@ -218,8 +222,8 @@ abstract class SwpmUtils {
 	public static function membership_level_dropdown( $selected = 0, $option_all = false ) {
 		$options = '';
 		global $wpdb;
-		$query  = 'SELECT alias, id FROM ' . $wpdb->prefix . 'swpm_membership_tbl WHERE id != 1';
-		$levels = $wpdb->get_results( $query );
+		
+		$levels = $wpdb->get_results( 'SELECT alias, id FROM ' . $wpdb->prefix . 'swpm_membership_tbl WHERE id != 1' );
 		foreach ( $levels as $level ) {
 			$options .= '<option ' . ( $selected == $level->id ? 'selected="selected"' : '' ) . ' value="' . $level->id . '" >' . $level->alias . '</option>';
 		}
@@ -229,13 +233,13 @@ abstract class SwpmUtils {
 	public static function get_all_membership_level_ids() {
 		global $wpdb;
 		$query = 'SELECT id FROM ' . $wpdb->prefix . 'swpm_membership_tbl WHERE id != 1';
-		return $wpdb->get_col( $query );
+		return $wpdb->get_col( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Query is built with prepared/sanitized parts.
 	}
 
 	public static function get_membership_level_row_by_id( $level_id ) {
 		global $wpdb;
-		$query = $wpdb->prepare( 'SELECT * FROM ' . $wpdb->prefix . 'swpm_membership_tbl WHERE id=%d', $level_id );
-		$level_resultset = $wpdb->get_row( $query );
+		
+		$level_resultset = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . $wpdb->prefix . 'swpm_membership_tbl WHERE id=%d', $level_id ) );
 		return $level_resultset;
 	}
 
@@ -258,12 +262,12 @@ abstract class SwpmUtils {
 				if ( empty( $member_id ) ) {
 					return array();
 				}
-				$query   = $wpdb->prepare( "SELECT * FROM  {$wpdb->prefix}swpm_members_tbl WHERE member_id =  %d", $member_id );
-				$members = $wpdb->get_results( $query );
+				
+				$members = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM  {$wpdb->prefix}swpm_members_tbl WHERE member_id =  %d", $member_id ) );
 				break;
 			case 'all':
-				$query   = "SELECT * FROM  {$wpdb->prefix}swpm_members_tbl WHERE reg_code != '' ";
-				$members = $wpdb->get_results( $query );
+				
+				$members = $wpdb->get_results( "SELECT * FROM  {$wpdb->prefix}swpm_members_tbl WHERE reg_code != '' " );
 				break;
 		}
 		$settings  = SwpmSettings::get_instance();
@@ -331,10 +335,21 @@ abstract class SwpmUtils {
 
 		if ( $wp_user ) {
 			$wp_user_info['ID'] = $wp_user->ID;
-			return wp_update_user( $wp_user_info );
+			//The plugin saves this data in the member record itself. So don't sync it back from the WP user (see SimpleWpMembership::sync_with_wp_profile()).
+			//Restore the previous value even if the update throws an exception (or is nested in another update).
+			$was_updating_wp_user = self::$is_updating_wp_user;
+			self::$is_updating_wp_user = true;
+			try {
+				return wp_update_user( $wp_user_info );
+			} finally {
+				self::$is_updating_wp_user = $was_updating_wp_user;
+			}
 		}
 		return false;
 	}
+
+	//True while the plugin is updating a WP user (see update_wp_user()).
+	public static $is_updating_wp_user = false;
 
 	public static function create_wp_user( $wp_user_data ) {
 
@@ -395,7 +410,7 @@ abstract class SwpmUtils {
 			if ( is_wp_error( $wp_user_id ) ) {
 				// Error occured when creating wp user, cannot proceed with this request.
 				$error_msg = $wp_user_id->get_error_message();
-				wp_die( $error_msg );
+				wp_die( wp_kses_post( $error_msg ));
 			}
 
             //Update that newly created user's profile with additional data.
@@ -416,11 +431,11 @@ abstract class SwpmUtils {
 	}
 
 	public static function _( $msg ) {
-		return __( $msg, 'simple-membership' );
+		return translate( $msg, 'simple-membership' ); // phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText -- Message is translated dynamically by design.
 	}
 
 	public static function e( $msg ) {
-		_e( $msg, 'simple-membership' );
+		echo wp_kses_post( translate( $msg, 'simple-membership' ) ); // phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText -- Message is translated dynamically by design.
 	}
 
 	/*
@@ -495,8 +510,8 @@ abstract class SwpmUtils {
 	public static function swpm_username_exists( $user_name ) {
 		global $wpdb;
 		$member_table = $wpdb->prefix . 'swpm_members_tbl';
-		$query        = $wpdb->prepare( 'SELECT member_id FROM ' . $member_table . ' WHERE user_name=%s', sanitize_user( $user_name ) );
-		return $wpdb->get_var( $query );
+		
+		return $wpdb->get_var( $wpdb->prepare( "SELECT member_id FROM {$wpdb->prefix}swpm_members_tbl WHERE user_name=%s", sanitize_user( $user_name ) ) );
 	}
 
 	public static function get_free_level() {
@@ -512,7 +527,7 @@ abstract class SwpmUtils {
                             if ( isset ( $_POST['swpm-fb-submit'] ) ){//Form builder submission potentially
                                 $msg .= '<p>If you are using the Form Builder addon, please update the addon and try again.</p>';
                             }
-                            wp_die( $msg );
+                            wp_die( wp_kses_post( $msg ));
                     }
 
                     return SwpmPermission::get_instance( $encrypted )->get( 'id' );
@@ -577,63 +592,121 @@ abstract class SwpmUtils {
                 $code = isset( $_GET['code'] ) ? sanitize_text_field( stripslashes ( $_GET['code'] ) ) : '';
 		global $wpdb;
 		if ( ! empty( $member_id ) && ! empty( $code ) ) {
-			$query = 'SELECT * FROM ' . $wpdb->prefix . 'swpm_members_tbl WHERE member_id= %d AND reg_code=%s';
-			$query = $wpdb->prepare( $query, $member_id, $code );
-			return $wpdb->get_row( $query );
-		}
-		return null;
-	}
-
-	public static function get_incomplete_paid_member_info_by_ip() {
-		global $wpdb;
-		$user_ip = self::get_user_ip_address();
-		if ( ! empty( $user_ip ) ) {
-			//Lets check if a payment has been confirmed from this user's IP and the profile needs to be completed (where username is empty).
-			$username = '';
-			$query    = 'SELECT * FROM ' . $wpdb->prefix . 'swpm_members_tbl WHERE last_accessed_from_ip=%s AND user_name=%s ORDER BY member_id DESC';
-			$query    = $wpdb->prepare( $query, $user_ip, $username );
-			$results  = $wpdb->get_results( $query );
-			foreach ( $results as $result ) {
-				//Some paid registration links are only shown to the browser that made the payment (see set_paid_registration_link_browser_only()).
-				if ( self::is_paid_registration_link_allowed_in_this_browser( $result ) ) {
-					return $result;
-				}
-			}
+			return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE member_id = %d AND reg_code = %s", $member_id, $code ) );
 		}
 		return null;
 	}
 
 	/*
-	 * Makes the paid registration link of a new (incomplete) member available only to the browser that made the payment.
-	 * Used by the checkouts that can identify the buyer's browser (example: Stripe checkout). The member's registration code is saved in a cookie in that browser.
-	 * The members of other checkouts (example: PayPal) are still found using the IP address only.
+	 * Returns the new member (that needs to complete the paid registration) of a payment made in this browser, or null.
+	 * Note: the name is kept for backward compatibility. The member is no longer found using the IP address (it can be spoofed),
+	 * only using the proof saved in the browser that made the payment (see get_paid_member_of_this_browser()).
 	 */
-	public static function set_paid_registration_link_browser_only( $member_id, $is_checkout_browser ) {
+	public static function get_incomplete_paid_member_info_by_ip() {
+		$member = self::get_paid_member_of_this_browser();
+		if ( $member && empty( $member->user_name ) ) {
+			return $member;
+		}
+		return null;
+	}
+
+	/*
+	 * Returns the member record of a payment made in this browser (it may have completed the registration already), or null.
+	 * The browser that made the payment has one of these cookies:
+	 * - 'swpm_paid_reg_code': the member's registration code. Set when the checkout returns to this site in the buyer's browser (Stripe, PayPal PPCP, Braintree).
+	 * - 'swpm_pp_checkout_tokens': random tokens created when a PayPal Standard button is clicked. The IPN saves the token's hash on the new member.
+	 * Other browsers get nothing. The member gets the paid registration link by email too.
+	 */
+	public static function get_paid_member_of_this_browser() {
+		global $wpdb;
+
+		$cookie_reg_code = isset( $_COOKIE['swpm_paid_reg_code'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['swpm_paid_reg_code'] ) ) : '';
+		if ( ! empty( $cookie_reg_code ) ) {
+			
+			$member = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . $wpdb->prefix . 'swpm_members_tbl WHERE reg_code=%s ORDER BY member_id DESC', $cookie_reg_code ) );
+			if ( $member && hash_equals( (string) $member->reg_code, $cookie_reg_code ) ) {
+				return $member;
+			}
+		}
+
+		//The newest token first. A member that still needs to complete the registration is preferred: a completed one is only
+		//returned when there is no pending one (for the "already completed" message), so it can't hide a pending checkout of this browser.
+		$completed_member = null;
+		foreach ( array_reverse( self::get_paypal_std_checkout_tokens() ) as $token ) {
+
+			$member_id = $wpdb->get_var( $wpdb->prepare( "SELECT member_id FROM {$wpdb->prefix}swpm_members_meta_tbl WHERE meta_key=%s AND meta_value=%s ORDER BY member_id DESC", 'paid_reg_browser_token_hash', hash( 'sha256', $token ) ) );
+			if ( ! empty( $member_id ) ) {
+				$member = SwpmMemberUtils::get_user_by_id( $member_id );
+				if ( $member && empty( $member->user_name ) ) {
+					return $member;
+				}
+				if ( $member && null === $completed_member ) {
+					$completed_member = $member;
+				}
+			}
+		}
+		return $completed_member;
+	}
+
+	/*
+	 * Saves the paid registration code of a new member in a cookie of this browser, so the paid registration link can be shown in it.
+	 * Call it only when the request is made by the buyer's browser after the payment (example: the checkout return URL or the onApprove request).
+	 * $is_checkout_browser: false when the request may not come from the buyer's browser (then nothing is saved, the member gets the link by email).
+	 */
+	public static function set_paid_registration_link_browser_only( $member_id, $is_checkout_browser = true ) {
+		if ( ! $is_checkout_browser ) {
+			return;
+		}
 		$member = SwpmMemberUtils::get_user_by_id( $member_id );
 		if ( empty( $member ) || ! empty( $member->user_name ) || empty( $member->reg_code ) ) {
 			//Not a member that needs to complete the paid registration.
 			return;
 		}
-		SwpmMembersMeta::update( $member_id, 'paid_reg_link_browser_only', '1' );
-
-		if ( $is_checkout_browser ) {
-			$secure = is_ssl();
-			setcookie( 'swpm_paid_reg_code', $member->reg_code, time() + WEEK_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, $secure, true );
-			//So it can also be used in this request (example: the redirect to the paid registration link after the payment).
-			$_COOKIE['swpm_paid_reg_code'] = $member->reg_code;
-		}
+		$secure = is_ssl();
+		setcookie( 'swpm_paid_reg_code', $member->reg_code, time() + WEEK_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, $secure, true );
+		//So it can also be used in this request (example: the redirect to the paid registration link after the payment).
+		$_COOKIE['swpm_paid_reg_code'] = $member->reg_code;
 	}
 
-	public static function is_paid_registration_link_allowed_in_this_browser( $member ) {
-		if ( ! SwpmMembersMeta::get( $member->member_id, 'paid_reg_link_browser_only', true ) ) {
-			//This link can be shown using the IP address only.
-			return true;
+	/*
+	 * PayPal Standard: saves the hash of the checkout token (created in the buyer's browser when the button was clicked, sent in the 'custom' field) on the new member.
+	 * The IPN is sent by PayPal (not the buyer's browser), so the token is how the thank you page finds the buyer's browser.
+	 */
+	public static function save_paid_registration_browser_token( $member_id, $token ) {
+		if ( empty( $member_id ) || ! is_string( $token ) || ! preg_match( '/^[0-9a-f]{24}$/', $token ) ) {
+			return;
 		}
-		$cookie_reg_code = isset( $_COOKIE['swpm_paid_reg_code'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['swpm_paid_reg_code'] ) ) : '';
-		if ( empty( $cookie_reg_code ) || empty( $member->reg_code ) ) {
+		$member = SwpmMemberUtils::get_user_by_id( $member_id );
+		if ( empty( $member ) || ! empty( $member->user_name ) ) {
+			//Not a member that needs to complete the paid registration.
+			return;
+		}
+		SwpmMembersMeta::update( $member_id, 'paid_reg_browser_token_hash', hash( 'sha256', $token ) );
+	}
+
+	/*
+	 * Returns the PayPal Standard checkout tokens of this browser (the 'swpm_pp_checkout_tokens' cookie, set by JavaScript when a PayPal Standard button is clicked). Oldest first.
+	 */
+	public static function get_paypal_std_checkout_tokens() {
+		$cookie_value = isset( $_COOKIE['swpm_pp_checkout_tokens'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['swpm_pp_checkout_tokens'] ) ) : '';
+		$tokens = array();
+		foreach ( array_slice( explode( '.', $cookie_value ), -5 ) as $token ) {
+			if ( preg_match( '/^[0-9a-f]{24}$/', $token ) ) {
+				$tokens[] = $token;
+			}
+		}
+		return $tokens;
+	}
+
+	/*
+	 * Checks if the paid registration link of the member can be shown in this browser (the browser that made the payment).
+	 */
+	public static function is_paid_registration_link_allowed_in_this_browser( $member ) {
+		if ( empty( $member ) || empty( $member->member_id ) ) {
 			return false;
 		}
-		return hash_equals( (string) $member->reg_code, $cookie_reg_code );
+		$browser_member = self::get_paid_member_of_this_browser();
+		return $browser_member && (int) $browser_member->member_id === (int) $member->member_id;
 	}
 
 	public static function account_delete_confirmation_ui( $msg = '' ) {
@@ -641,7 +714,7 @@ abstract class SwpmUtils {
 		include SIMPLE_WP_MEMBERSHIP_PATH . 'views/account_delete_warning.php';
 		ob_get_flush();
 		$title = __( 'Confirm Account Deletion', 'simple-membership' );
-		wp_die( '', $title, array( 'back_link' => true ) );
+		wp_die( '', esc_html( $title ), array( 'back_link' => true ) );
 	}
 
 	public static function delete_account_button() {
@@ -682,7 +755,7 @@ abstract class SwpmUtils {
 
         public static function swpm_sanitize_text( $text ) {
                 $text = htmlspecialchars( $text );
-                $text = strip_tags( $text );
+                $text = wp_strip_all_tags( $text );
                 $text = sanitize_text_field( $text );
                 $text = esc_attr( $text );
                 return $text;
@@ -888,7 +961,7 @@ abstract class SwpmUtils {
 		$level_id = get_post_meta($button_id, 'membership_level_id', true);
 		if(!SwpmUtils::membership_level_id_exists($level_id)){
 			//This membership level doesn't exist. Show an error instead of the shortcode.
-			$shortcode = '<span style="color:red;">' . __('Error! The membership level you specified in this button does not exist. You may have deleted this level. Edit this button and select a valid membership level.', 'simple-membership') . '</span>';
+			$shortcode = '<span style="color:red;">' . esc_html__('Error! The membership level you specified in this button does not exist. You may have deleted this level. Edit this button and select a valid membership level.', 'simple-membership') . '</span>';
 		} else {
 			//If $size is empty, add 'large-text' class and no size attribute (so it adjusts responsively).
 			if( empty ($size) ){

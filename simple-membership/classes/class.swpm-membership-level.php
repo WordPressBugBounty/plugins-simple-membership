@@ -50,7 +50,7 @@ class SwpmMembershipLevel {
         //Check nonce
         if ( !isset($_POST['_wpnonce_create_swpmlevel_admin_end']) || !wp_verify_nonce($_POST['_wpnonce_create_swpmlevel_admin_end'], 'create_swpmlevel_admin_end' )){
             //Nonce check failed.
-            wp_die(SwpmUtils::_("Error! Nonce verification failed for membership level creation from admin end."));
+            wp_die(esc_html__( "Error! Nonce verification failed for membership level creation from admin end.", 'simple-membership' ));
         }
         
         global $wpdb;
@@ -98,6 +98,7 @@ class SwpmMembershipLevel {
 	        $custom[] = $after_activation_redirect_page_meta;
 	        $custom[] = $default_account_status_meta;
 	        $custom[] = $annual_fixed_date_min_period;
+	        $custom[] = self::get_role_after_expiry_meta_from_request( $id );
             $this->save_custom_fields($id, $custom);
             $message = array('succeeded' => true, 'message' => '<p>' . SwpmUtils::_('Membership Level Creation Successful.') . '</p>');
             SwpmTransfer::get_instance()->set('status', $message);
@@ -115,12 +116,12 @@ class SwpmMembershipLevel {
         //Check nonce
         if ( !isset($_POST['_wpnonce_edit_swpmlevel_admin_end']) || !wp_verify_nonce($_POST['_wpnonce_edit_swpmlevel_admin_end'], 'edit_swpmlevel_admin_end' )){
             //Nonce check failed.
-            wp_die(SwpmUtils::_("Error! Nonce verification failed for membership level edit from admin end."));
+            wp_die(esc_html__( "Error! Nonce verification failed for membership level edit from admin end.", 'simple-membership' ));
         }
         
         global $wpdb;
-        $query = $wpdb->prepare("SELECT * FROM " . $wpdb->prefix . "swpm_membership_tbl WHERE id = %d", $id);
-        $level = $wpdb->get_row($query, ARRAY_A);
+        
+        $level = $wpdb->get_row($wpdb->prepare("SELECT * FROM " . $wpdb->prefix . "swpm_membership_tbl WHERE id = %d", $id), ARRAY_A);
         $form = new SwpmLevelForm($level);
         if ($form->is_valid()) {
             $wpdb->update($wpdb->prefix . "swpm_membership_tbl", $form->get_sanitized(), array('id' => $id));
@@ -163,6 +164,7 @@ class SwpmMembershipLevel {
 			$custom[] = $after_activation_redirect_page_meta;
 			$custom[] = $default_account_status_meta;
 			$custom[] = $annual_fixed_date_min_period;
+			$custom[] = self::get_role_after_expiry_meta_from_request( $id );
             $this->save_custom_fields($id, $custom);
             $message = array('succeeded' => true, 'message' => '<p>'. SwpmUtils::_('Membership Level Updated Successfully.') . '</p>');
             SwpmTransfer::get_instance()->set('status', $message);
@@ -171,6 +173,25 @@ class SwpmMembershipLevel {
         }
         $message = array('succeeded' => false, 'message' => SwpmUtils::_('Please correct the following:'), 'extra' => $form->get_errors());
         SwpmTransfer::get_instance()->set('status', $message);
+    }
+
+    /**
+     * Builds the "WordPress Role After Expiry" level meta from the submitted level form.
+     * Only a valid, non-administrator role is saved. Anything else is saved as empty (no role change).
+     */
+    private static function get_role_after_expiry_meta_from_request( $level_id ) {
+        $role_after_expiry = isset( $_POST['role_after_expiry'] ) ? sanitize_text_field( wp_unslash( $_POST['role_after_expiry'] ) ) : '';
+        if ( ! array_key_exists( $role_after_expiry, SwpmMemberUtils::get_roles_for_role_after_expiry() ) ) {
+            $role_after_expiry = '';
+        }
+        return array(
+            'meta_key' => 'role_after_expiry',
+            'level_id' => $level_id,
+            'meta_label' => 'WordPress Role After Expiry',
+            'meta_value' => $role_after_expiry,
+            'meta_type' => 'text',
+            'meta_context' => 'wp-role',
+        );
     }
 
     private function save_custom_fields($level_id, $data) {

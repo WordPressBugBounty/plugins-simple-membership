@@ -1,4 +1,8 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 /* 
 * Note: We are passing the $ipn_data parameter by reference because we try to add the 'member_id' value to it (from our search or when we insert a new record).
 * This is helpful to save the member_id reference in save transaction function later. 
@@ -112,6 +116,9 @@ function swpm_handle_subsc_signup_stand_alone( &$ipn_data, $subsc_ref, $unique_r
 			)
 		);
 
+		//A new payment restores the level's default WP role, if the level uses the "WordPress Role After Expiry" option.
+		SwpmMemberUtils::restore_level_role( $swpm_id );
+
 
 		$email   = $ipn_data['payer_email'];
 		$from_address = $settings->get_value( 'email-from' );
@@ -213,6 +220,8 @@ function swpm_handle_subsc_signup_stand_alone( &$ipn_data, $subsc_ref, $unique_r
 
 		//Add the member ID value to the $ipn_data (pass by reference will ensure that we will have it available in our save transaction function).
 		$ipn_data['member_id'] = $member_id;
+		//This checkout created the member (not an existing member found by the swpm_id, email or reference). Only then the paying browser gets the paid registration link proof.
+		$ipn_data['new_member_created'] = true;
 
 		//Create the signup/registration complete URL for the paid membership.
 		$rego_page_url = $settings->get_value( 'registration-page-url' );
@@ -717,7 +726,7 @@ function swpm_send_subscription_cancel_notification_email($member_id, $subscript
 	$member = SwpmMemberUtils::get_user_by_id( $member_id );
 	if ( empty( $member ) ) {
 		//can't find recipient member
-		wp_die(__( "Can't find member account to send notification email." , 'simple-membership'));
+		wp_die(esc_html__( "Can't find member account to send notification email.", 'simple-membership' ));
 	}
 
 	//Additional arguments for dynamic tag replacement
@@ -898,6 +907,9 @@ function swpm_update_member_subscription_start_date_if_applicable( &$ipn_data ) 
 		$member_record = SwpmMemberUtils::get_user_by_id( $swpm_id );
 		swpm_debug_log_subsc( 'Value after update - Subscriber ID: ' . $member_record->subscr_id . ', Start Date: ' . $member_record->subscription_starts, true );
 		if ( $update_result !== false ) {
+			//A new payment restores the level's default WP role, if the level uses the "WordPress Role After Expiry" option.
+			SwpmMemberUtils::restore_level_role( $swpm_id );
+
 			swpm_send_subscription_renewal_notification_email( $swpm_id, $ipn_data );
 		}
 	} else {

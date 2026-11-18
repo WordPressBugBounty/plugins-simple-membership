@@ -1,4 +1,8 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 
 class SwpmShortcodesHandler {
 
@@ -65,6 +69,19 @@ class SwpmShortcodesHandler {
 			return $error_msg;
 		}
 
+		//The Stripe Legacy buttons have been removed. Show a note to the site admin only (visitors see nothing).
+		if ( in_array( $button_type, array( 'stripe_buy_now', 'stripe_subscription' ), true ) ) {
+			if ( current_user_can( SWPM_MANAGEMENT_PERMISSION ) ) {
+				$error_msg  = '<p class="swpm-red-box">';
+				$error_msg .= sprintf( 
+                /* translators: %s: payment button ID. */
+                __( 'Note for the site admin: the Stripe Legacy payment button (ID: %s) used here has been removed from the plugin. Create a new Stripe Buy Now or Stripe Subscription button and use its shortcode instead. Only site admins can see this note.', 'simple-membership' ), esc_attr( $button_id ) );
+				$error_msg .= '</p>';
+				return $error_msg;
+			}
+			return '';
+		}
+
 		//Initialize the output variable.
 		$output = '';
 		$any_note_or_msg_output = '';
@@ -124,7 +141,6 @@ class SwpmShortcodesHandler {
 		$hide_payment_btn = apply_filters( 'swpm_hide_payment_button', $hide_payment_btn, $button_id, $button_type );
 		if ( !$hide_payment_btn ){
 			include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'views/payments/payment-gateway/paypal_button_shortcode_view.php' );
-			include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'views/payments/payment-gateway/stripe_button_shortcode_view.php' );
 			include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'views/payments/payment-gateway/stripe_sca_button_shortcode_view.php' );
 			include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'views/payments/payment-gateway/braintree_button_shortcode_view.php' );
 			include_once( SIMPLE_WP_MEMBERSHIP_PATH . 'views/payments/payment-gateway/paypal_buy_now_new_button_shortcode_view.php' );
@@ -157,10 +173,11 @@ class SwpmShortcodesHandler {
 
 		//If user is not-logged in then lets see if there is a pending registration that needs to be completed.
 		$output .= '<div class="swpm-ty-page-registration">';
-		$member_data = SwpmUtils::get_incomplete_paid_member_info_by_ip();
-		$member_by_ip = SwpmMemberUtils::get_user_by_ip_address();
+		//The member of a payment made in this browser (not found by the IP address, which can be spoofed). Other browsers get the message below (the link is sent by email).
+		$browser_member = SwpmUtils::get_paid_member_of_this_browser();
+		$member_data = ( $browser_member && empty( $browser_member->user_name ) ) ? $browser_member : null;
 		if ( $member_data ) {
-			//Found a member profile record for this IP that needs to be completed
+			//Found a member profile record (of a payment made in this browser) that needs to be completed
 			$reg_page_url      = $settings->get_value( 'registration-page-url' );
 			$rego_complete_url = add_query_arg(
 				array(
@@ -175,9 +192,8 @@ class SwpmShortcodesHandler {
 			$output .= '</div>';
 			//Allow addons to modify the output
 			$output = apply_filters( 'swpm_ty_page_registration_msg_with_link', $output, $rego_complete_url );
-		} else if ( $member_by_ip && ! empty( $member_by_ip->user_name ) ) {
-			//Found a member profile record for this IP but it is not a pending registration
-			//(a pending registration whose link is only shown to the browser that made the payment gets the message below: the link is sent by email).
+		} else if ( $browser_member && ! empty( $browser_member->user_name ) ) {
+			//The member of a payment made in this browser has already completed the registration.
 			$output .= '<div class="swpm-ty-page-registration-link swpm-found-user-by-ip swpm-yellow-box">';
 			$output .= __( "It looks like you have already completed the registration process. You can now log in to the site and start enjoying your membership benefits.", "simple-membership" );
 			$output .= '</div>';
@@ -186,7 +202,7 @@ class SwpmShortcodesHandler {
 		} else {
 			//Nothing found. Check again later.
 			$output .= '<div class="swpm-ty-page-registration-link swpm-no-user-found swpm-yellow-box">';
-			$output .= __( 'If you have just made a membership payment then your payment is yet to be processed. Please check back in a few minutes. An email will be sent to you with the details shortly.', 'simple-membership' );
+			$output .= __( 'If you have just made a membership payment, it may still be processing. Please check your email: you will receive a link to complete your registration shortly.', 'simple-membership' );
 			$output .= '</div>';
 			//Allow addons to modify the output
 			$output = apply_filters( 'swpm_ty_page_registration_msg_no_link', $output );
@@ -512,7 +528,7 @@ class SwpmShortcodesHandler {
 				return $override_out;
 			}
 			ob_start();
-			echo $any_notice_output;//Include any output from the execution (for showing output inside the shortcode)
+			echo wp_kses_post( $any_notice_output );//Include any output from the execution (for showing output inside the shortcode)
 			//Load the edit profile template
 			// SwpmUtilsTemplate::swpm_load_template('edit.php', false);
 			$render_new_form_ui = SwpmSettings::get_instance()->get_value('use-new-form-ui');
@@ -558,14 +574,14 @@ class SwpmShortcodesHandler {
 
 		if( isset( $_GET["action"]) && $_GET["action"] == "swpm-reset-using-link" ) {
 			ob_start();
-			echo $any_notice_output;//Include any output from the execution (for showing output inside the shortcode)
+			echo wp_kses_post( $any_notice_output );//Include any output from the execution (for showing output inside the shortcode)
 			//Load the reset password template
 			SwpmUtilsTemplate::swpm_load_template('reset_password_using_link.php', false);
 			return ob_get_clean();
 		}
 		else {
 			ob_start();
-			echo $any_notice_output;//Include any output from the execution (for showing output inside the shortcode)
+			echo wp_kses_post( $any_notice_output );//Include any output from the execution (for showing output inside the shortcode)
 			//Load the forgot password template
 			SwpmUtilsTemplate::swpm_load_template('forgot_password.php', false);
 			return ob_get_clean();

@@ -1,13 +1,15 @@
 <?php
 /*
 Plugin Name: Simple Membership
-Version: 4.8.8
+Version: 4.8.9
 Plugin URI: https://simple-membership-plugin.com/
 Author: smp7, wp.insider
 Author URI: https://simple-membership-plugin.com/
 Description: A flexible, well-supported, and easy-to-use WordPress membership plugin for offering free and premium content from your WordPress site.
 Text Domain: simple-membership
 Domain Path: /languages/
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Requires PHP: 7.4
 */
 
@@ -17,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 //Define plugin constants
-define( 'SIMPLE_WP_MEMBERSHIP_VER', '4.8.8' );
+define( 'SIMPLE_WP_MEMBERSHIP_VER', '4.8.9' );
 define( 'SIMPLE_WP_MEMBERSHIP_DB_VER', '1.6' );
 define( 'SIMPLE_WP_MEMBERSHIP_SITE_HOME_URL', home_url() );
 define( 'SIMPLE_WP_MEMBERSHIP_PATH', dirname( __FILE__ ) . '/' );

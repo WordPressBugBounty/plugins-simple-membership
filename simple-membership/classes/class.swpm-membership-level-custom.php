@@ -1,4 +1,8 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 /**
  * Used to store custom data for membership levels.
  */
@@ -20,8 +24,8 @@
     }
     public function load_by_id($level_id){
         global $wpdb;
-        $query = 'SELECT * FROM ' . $wpdb->prefix . 'swpm_membership_meta_tbl WHERE level_id=%d';
-        $results = $wpdb->get_results($wpdb->prepare($query, $level_id), ARRAY_A);
+        
+        $results = $wpdb->get_results($wpdb->prepare('SELECT * FROM ' . $wpdb->prefix . 'swpm_membership_meta_tbl WHERE level_id=%d', $level_id), ARRAY_A);
         foreach($results as $result){
             $this->fields[$result['meta_key']] = $result;
         }
@@ -38,7 +42,10 @@
             'meta_context'=> $item['meta_context'],
             );
         if (isset($this->fields[$meta_key])){
-            $new['id'] = $this->fields[$meta_key]['id'];
+            // A field added earlier in this request may not have its row id recorded yet.
+            if (isset($this->fields[$meta_key]['id'])){
+                $new['id'] = $this->fields[$meta_key]['id'];
+            }
             $this->fields[$meta_key] = $new;
         }
         else{
@@ -68,7 +75,9 @@
         global $wpdb;
         if (!isset($field['meta_key'])){return;} // cannot continue without key field.
         $meta_key = preg_replace('|[^A-Z0-9_]|i', '', $field['meta_key']);
-        $query = $wpdb->prepare(
+        
+
+        $result = $wpdb->query($wpdb->prepare(
                 'REPLACE INTO ' . $wpdb->prefix. 'swpm_membership_meta_tbl
                 (level_id, meta_key, meta_label, meta_value, meta_type, meta_default, meta_context)
                 VALUES(%d, %s, %s, %s, %s, %s, %s); ',
@@ -79,9 +88,7 @@
                 'text', // at the moment we have only one type
                 '',
                 isset($field['meta_context'])? sanitize_text_field($field['meta_context']): 'default'
-                );
-
-        $result = $wpdb->query($query);
+                ));
 
         // The table has no unique key on level_id and meta_key, so REPLACE always adds a new row. Remove the older copies of this field.
         if ($result && $wpdb->insert_id){
@@ -91,6 +98,11 @@
                 $meta_key,
                 $wpdb->insert_id
             ));
+
+            // Keep the cached field pointing at the row that now holds its value.
+            if (isset($this->fields[$meta_key])){
+                $this->fields[$meta_key]['id'] = $wpdb->insert_id;
+            }
         }
     }
     public static function get_value_by_key($level_id, $key, $default= ''){

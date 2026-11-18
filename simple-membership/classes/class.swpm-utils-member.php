@@ -72,8 +72,8 @@ class SwpmMemberUtils {
 
 	public static function get_member_field_by_id( $id, $field, $default = '' ) {
 		global $wpdb;
-		$query    = 'SELECT * FROM ' . $wpdb->prefix . 'swpm_members_tbl WHERE member_id = %d';
-		$userData = $wpdb->get_row( $wpdb->prepare( $query, $id ) );
+		
+		$userData = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . $wpdb->prefix . 'swpm_members_tbl WHERE member_id = %d', $id ) );
 		if ( isset( $userData->$field ) ) {
 			return $userData->$field;
 		}
@@ -87,7 +87,7 @@ class SwpmMemberUtils {
 			//No Expiry Setting
 			$formatted_expiry_date = SwpmUtils::_( 'No Expiry' );
 		} else {
-			$expiry_date           = date( 'Y-m-d', $expiry_timestamp );
+			$expiry_date           = gmdate( 'Y-m-d', $expiry_timestamp );
 			$formatted_expiry_date = SwpmUtils::get_formatted_date_according_to_wp_settings( $expiry_date );
 		}
 		return $formatted_expiry_date;
@@ -102,32 +102,32 @@ class SwpmMemberUtils {
 	public static function member_record_exists( $swpm_id ) {
 		// Checks if the SWPM user record exists for the given member ID.
 		global $wpdb;
-		$query = $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}swpm_members_tbl WHERE member_id = %d", $swpm_id );
-		$count = $wpdb->get_var( $query );
+		
+		$count = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}swpm_members_tbl WHERE member_id = %d", $swpm_id ) );
 		return $count > 0;
 	}
 	
 	public static function get_user_by_id( $swpm_id ) {
 		//Retrieves the SWPM user record for the given member ID
 		global $wpdb;
-		$query  = $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE member_id = %d", $swpm_id );
-		$result = $wpdb->get_row( $query );
+		
+		$result = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE member_id = %d", $swpm_id ) );
 		return $result;
 	}
 
 	public static function get_user_by_user_name( $swpm_user_name ) {
 		//Retrieves the SWPM user record for the given member username
 		global $wpdb;
-		$query  = $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE user_name = %s", $swpm_user_name );
-		$result = $wpdb->get_row( $query );
+		
+		$result = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE user_name = %s", $swpm_user_name ) );
 		return $result;
 	}
 
 	public static function get_user_by_email( $swpm_email ) {
 		//Retrieves the SWPM user record for the given member email address
 		global $wpdb;
-		$query  = $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE email = %s", $swpm_email );
-		$result = $wpdb->get_row( $query );
+		
+		$result = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE email = %s", $swpm_email ) );
 		return $result;
 	}
 
@@ -135,8 +135,8 @@ class SwpmMemberUtils {
 		//Retrieves the SWPM user record for the given Subscription ID.
 		//(Subscriber ID = Subscription ID)
 		global $wpdb;
-		$query  = $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE subscr_id = %s", $subsc_id );
-		$result = $wpdb->get_row( $query );
+		
+		$result = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE subscr_id = %s", $subsc_id ) );
 		return $result;
 	}
 
@@ -152,9 +152,7 @@ class SwpmMemberUtils {
 		if ( ! empty( $user_ip ) ) {
 			//Lets check if a member profile exists with this IP address.
 			global $wpdb;
-			$query = 'SELECT * FROM ' . $wpdb->prefix . 'swpm_members_tbl WHERE last_accessed_from_ip=%s ORDER BY member_id DESC';
-			$query = $wpdb->prepare( $query, $user_ip );
-			$result = $wpdb->get_row( $query );
+			$result = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE last_accessed_from_ip = %s ORDER BY member_id DESC", $user_ip ) );
 			return $result;
 		}
 		return null;
@@ -183,16 +181,16 @@ class SwpmMemberUtils {
 	public static function get_all_members_of_a_level( $level_id ) {
 		//Retrieves all the SWPM user records for the given membership level
 		global $wpdb;
-		$query  = $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE membership_level = %s", $level_id );
-		$result = $wpdb->get_results( $query );
+		
+		$result = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE membership_level = %s", $level_id ) );
 		return $result;
 	}
 
 	public static function get_all_members_of_account_status( $status ) {
 		//Retrieves all the SWPM user records for the given account status
 		global $wpdb;
-		$query  = $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE account_state = %s", $status );
-		$result = $wpdb->get_results( $query );
+		
+		$result = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE account_state = %s", $status ) );
 		return $result;
 	}
 
@@ -208,30 +206,22 @@ class SwpmMemberUtils {
 	public static function get_all_members_of_a_level_and_a_state($level_id, $account_state) {
 		global $wpdb;
 
-		$query  = "SELECT * FROM {$wpdb->prefix}swpm_members_tbl";
-		
-		// Check if 'WHERE' clause need to be used or not.
-		if($level_id != -1 || $account_state != 'all'){
-
-			$placeholders = array();
-			$where_clauses = array();
-			
-			if ($level_id != -1) {
-				$where_clauses[] = "membership_level = %d";
-				$placeholders[] = $level_id;
-			}
-			if ($account_state != 'all') {     
-				$where_clauses[] = "account_state = %s";
-				$placeholders[] = $account_state;
-			}
-			
-			$query .= " WHERE " . implode(" AND ", $where_clauses);
-			
-			// query preparation is not required as there are not placeholders.
-			$query = $wpdb->prepare($query, $placeholders);
-		}
-		
-		$result = $wpdb->get_results( $query );
+		if ( $level_id != -1 && $account_state != 'all' ) {
+            $result = $wpdb->get_results( $wpdb->prepare(
+                "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE membership_level = %d AND account_state = %s",
+                $level_id, $account_state
+            ) );
+        } elseif ( $level_id != -1 ) {
+            $result = $wpdb->get_results( $wpdb->prepare(
+                "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE membership_level = %d", $level_id
+            ) );
+        } elseif ( $account_state != 'all' ) {
+            $result = $wpdb->get_results( $wpdb->prepare(
+                "SELECT * FROM {$wpdb->prefix}swpm_members_tbl WHERE account_state = %s", $account_state
+            ) );
+        } else {
+            $result = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}swpm_members_tbl" );
+        }
 
 		return $result;
 	}
@@ -248,8 +238,8 @@ class SwpmMemberUtils {
 	public static function update_membership_level( $member_id, $target_membership_level ) {
 		global $wpdb;
 		$members_table_name = $wpdb->prefix . 'swpm_members_tbl';
-		$query              = $wpdb->prepare( "UPDATE $members_table_name SET membership_level=%s WHERE member_id=%s", $target_membership_level, $member_id );
-		$resultset          = $wpdb->query( $query );
+		
+		$resultset          = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}swpm_members_tbl SET membership_level=%s WHERE member_id=%s", $target_membership_level, $member_id ) );
 	}
 
 	/*
@@ -284,8 +274,8 @@ class SwpmMemberUtils {
 		$members_table_name = $wpdb->prefix . 'swpm_members_tbl';
 
 		SwpmLog::log_simple_debug( 'Updating the account status value of member (ID: ' . $member_id . ') to: ' . $new_status, true );
-		$query = $wpdb->prepare( "UPDATE $members_table_name SET account_state=%s WHERE member_id=%s", $new_status, $member_id );
-		$resultset = $wpdb->query( $query );
+		
+		$resultset = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}swpm_members_tbl SET account_state=%s WHERE member_id=%s", $new_status, $member_id ) );
 
 		//Trigger the account status updated action hook. It doesn't matter if the status is not changed. 
 		//The function listening to this hook can decide what to do.
@@ -306,8 +296,8 @@ class SwpmMemberUtils {
 	public static function update_access_starts_date( $member_id, $new_date ) {
 		global $wpdb;
 		$members_table_name = $wpdb->prefix . 'swpm_members_tbl';
-		$query              = $wpdb->prepare( "UPDATE $members_table_name SET subscription_starts=%s WHERE member_id=%s", $new_date, $member_id );
-		$resultset          = $wpdb->query( $query );
+		
+		$resultset          = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}swpm_members_tbl SET subscription_starts=%s WHERE member_id=%s", $new_date, $member_id ) );
 	}
 
 	/*
@@ -319,8 +309,8 @@ class SwpmMemberUtils {
 		$members_table_name = $wpdb->prefix . 'swpm_members_tbl';
 		$extra_info_serialized = serialize( $extra_info );
 		//SwpmLog::log_simple_debug( 'Updating the extra_info value of member (' . $member_id . ') to: ' . $extra_info_serialized, true );
-		$query = $wpdb->prepare( "UPDATE $members_table_name SET extra_info=%s WHERE member_id=%s", $extra_info_serialized, $member_id );
-		$resultset = $wpdb->query( $query );
+		
+		$resultset = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}swpm_members_tbl SET extra_info=%s WHERE member_id=%s", $extra_info_serialized, $member_id ) );
 	}
 
 	/*
@@ -354,7 +344,7 @@ class SwpmMemberUtils {
 		$old_account_state    = isset($args['old_account_state']) ? $args['old_account_state'] : '';
 
 		//Start with default current date.
-		$access_starts = SwpmUtils::get_current_date_in_wp_zone();//( date( 'Y-m-d' ) );
+		$access_starts = SwpmUtils::get_current_date_in_wp_zone();//( gmdate( 'Y-m-d' ) );
 
 		//Check if the membership level is the same as the old level.
 		if ( $membership_level == $old_membership_level ) {
@@ -380,7 +370,7 @@ class SwpmMemberUtils {
 				} else {
 					//Duration expiry level.
 					//Set the $access_starts date to the current expiry date so the renewal time starts from then.
-					$access_starts = date( 'Y-m-d', $expiry_timestamp );
+					$access_starts = gmdate( 'Y-m-d', $expiry_timestamp );
 					SwpmLog::log_simple_debug( 'This is a DURATION expiry level. Use the current expiry date for the Access Starts date.', true );
 				}
 			} else {
@@ -410,9 +400,11 @@ class SwpmMemberUtils {
                 $admin_user = SwpmMemberUtils::wp_user_has_admin_role( $wp_user_id );
                 if ( $admin_user ) {
                     //This email belongs to an admin user. Cannot use/register using an admin user's email from front-end. Show error message then exit.
-                    $error_msg = '<p>'.sprintf(__('This email address (%s) belongs to an admin user. This email cannot be used to register a new account on this site for security reasons. Contact site admin.', 'simple-membership'), $email_to_check).'</p>';
+                    $error_msg = '<p>'.sprintf(
+                /* translators: %s: email address associated with an existing WordPress account. */
+                __('This email address (%s) belongs to an admin user. This email cannot be used to register a new account on this site for security reasons. Contact site admin.', 'simple-membership'), $email_to_check).'</p>';
                     $error_msg .= '<p>'.__('For testing purpose, you can create another user account that is completely separate from the admin user account of this site.', 'simple-membership').'</p>';
-                    wp_die( $error_msg );
+                    wp_die( wp_kses_post( $error_msg ));
                 }
 			}
         }
@@ -426,9 +418,11 @@ class SwpmMemberUtils {
                 $admin_user = SwpmMemberUtils::wp_user_has_admin_role( $wp_user_id );
                 if ( $admin_user ) {
                     //This Username belongs to an admin user. Cannot use/register using an existing admin user's username from front-end. Show error message then exit.
-                    $error_msg = '<p>'.sprintf(__('This username (%s) belongs to an admin user. It cannot be used to register a new account on this site for security reasons. Contact site admin.', 'simple-membership'), $username_to_check).'</p>';
+                    $error_msg = '<p>'.sprintf(
+                /* translators: %s: username associated with an existing WordPress account. */
+                __('This username (%s) belongs to an admin user. It cannot be used to register a new account on this site for security reasons. Contact site admin.', 'simple-membership'), $username_to_check).'</p>';
                     $error_msg .= '<p>'.__('For testing purpose, you can create another user account that is completely separate from the admin user account of this site.', 'simple-membership').'</p>';
-                    wp_die( $error_msg );
+                    wp_die( wp_kses_post( $error_msg ));
                 }
             }
         }
@@ -482,14 +476,18 @@ class SwpmMemberUtils {
 		}
 
 		if ( $identified_by === 'email' ) {
-			$error_msg = '<p>' . sprintf( __( 'This email address (%s) is already associated with an existing WordPress user account on this site.', 'simple-membership' ), $identifier_value ) . '</p>';
+			$error_msg = '<p>' . sprintf( 
+                /* translators: %s: email address associated with an existing WordPress account. */
+                __( 'This email address (%s) is already associated with an existing WordPress user account on this site.', 'simple-membership' ), $identifier_value ) . '</p>';
 		} else {
-			$error_msg = '<p>' . sprintf( __( 'This username (%s) is already associated with an existing WordPress user account on this site.', 'simple-membership' ), $identifier_value ) . '</p>';
+			$error_msg = '<p>' . sprintf( 
+                /* translators: %s: username associated with an existing WordPress account. */
+                __( 'This username (%s) is already associated with an existing WordPress user account on this site.', 'simple-membership' ), $identifier_value ) . '</p>';
 		}
 		$error_msg .= '<p>' . __( 'For security reasons, a new membership account cannot be automatically linked to an existing WordPress user account. Please use a different email address/username to register.', 'simple-membership' ) . '</p>';
 		$error_msg .= '<p>' . __( 'If this is your existing account, please contact the site admin so they can link it to a membership from the admin dashboard.', 'simple-membership' ) . '</p>';
 		SwpmLog::log_simple_debug( 'Registration prevented: Attempted to bind the member account to an existing WordPress user (ID: ' . $wp_user_id . ') account using ' . $identified_by . ': ' . $identifier_value . '.', true );
-		wp_die( $error_msg );
+		wp_die( wp_kses_post( $error_msg ));
 	}
 
         /**
@@ -626,7 +624,114 @@ class SwpmMemberUtils {
 		// This does not trigger the 'set_user_role' action hook, so it won't cause other plugins to run their code that is hooked to that action (which is what we want in this case). 
 		$user->add_role( $role ); 
 	
-		SwpmLog::log_simple_debug( 'WP user role updated. Role: ' . $role . ', User email: ' . $user->user_email, true ); 
+		SwpmLog::log_simple_debug( 'WP user role updated. Role: ' . $role . ', User email: ' . $user->user_email, true );
+	}
+
+	/**
+	 * Returns the WP roles that can be selected for the "WordPress Role After Expiry" option of a membership level.
+	 * The administrator role is never offered.
+	 *
+	 * @return array Role key => role name.
+	 */
+	public static function get_roles_for_role_after_expiry() {
+		$roles = wp_roles()->get_names();
+		unset( $roles['administrator'] );
+		return $roles;
+	}
+
+	/**
+	 * Returns the "WordPress Role After Expiry" value of a membership level.
+	 * An empty value means the feature is not used for that level (no role change on expiry or payment).
+	 *
+	 * @param int $level_id The membership level ID.
+	 * @return string The role key or an empty string.
+	 */
+	public static function get_role_after_expiry_of_level( $level_id ) {
+		if ( empty( $level_id ) ) {
+			return '';
+		}
+		return sanitize_text_field( SwpmMembershipLevelCustom::get_value_by_key( $level_id, 'role_after_expiry' ) );
+	}
+
+	/**
+	 * Finds the WP user of a member record (by username, then by email, the same way the level change handler does it).
+	 *
+	 * @param object $member The member record (row of the members table).
+	 * @return WP_User|null
+	 */
+	private static function get_wp_user_of_member_record( $member ) {
+		$wp_user = ! empty( $member->user_name ) ? get_user_by( 'login', $member->user_name ) : false;
+		if ( ! $wp_user instanceof WP_User && ! empty( $member->email ) ) {
+			$wp_user = get_user_by( 'email', $member->email );
+		}
+		return $wp_user instanceof WP_User ? $wp_user : null;
+	}
+
+	/**
+	 * Applies the "WordPress Role After Expiry" role of the member's level to the member's WP user.
+	 * Does nothing if the option is not set for the member's level.
+	 *
+	 * @param int $member_id The member ID.
+	 */
+	public static function apply_expiry_role( $member_id ) {
+		$member = self::get_user_by_id( $member_id );
+		if ( ! $member ) {
+			return;
+		}
+
+		$role_after_expiry = self::get_role_after_expiry_of_level( $member->membership_level );
+		if ( empty( $role_after_expiry ) ) {
+			//The option is not used for this level. Nothing to do.
+			return;
+		}
+
+		if ( ! array_key_exists( $role_after_expiry, self::get_roles_for_role_after_expiry() ) ) {
+			//The role may have been deleted after the level was saved.
+			SwpmLog::log_simple_debug( 'Role after expiry (' . $role_after_expiry . ') of level ID ' . $member->membership_level . ' is not a valid role. No role change for member ID: ' . $member_id, false );
+			return;
+		}
+
+		$wp_user = self::get_wp_user_of_member_record( $member );
+		if ( ! $wp_user ) {
+			SwpmLog::log_simple_debug( 'Role after expiry - WP user not found for member ID: ' . $member_id . '. No role change.', true );
+			return;
+		}
+
+		SwpmLog::log_simple_debug( 'Role after expiry - Membership expired. Changing the WP user role to: ' . $role_after_expiry . '. Member ID: ' . $member_id, true );
+		self::update_wp_user_role( $wp_user->ID, $role_after_expiry );
+	}
+
+	/**
+	 * Applies the "Default WordPress Role" of the member's current level to the member's WP user.
+	 * Used after a payment or an admin reactivation. Only does something when the member's level uses the "WordPress Role After Expiry" option.
+	 *
+	 * @param int $member_id The member ID.
+	 */
+	public static function restore_level_role( $member_id ) {
+		$member = self::get_user_by_id( $member_id );
+		if ( ! $member ) {
+			return;
+		}
+
+		$role_after_expiry = self::get_role_after_expiry_of_level( $member->membership_level );
+		if ( empty( $role_after_expiry ) ) {
+			//The option is not used for this level. Nothing to do.
+			return;
+		}
+
+		$level_row = SwpmUtils::get_membership_level_row_by_id( $member->membership_level );
+		if ( ! $level_row || empty( $level_row->role ) ) {
+			return;
+		}
+
+		$wp_user = self::get_wp_user_of_member_record( $member );
+		if ( ! $wp_user ) {
+			SwpmLog::log_simple_debug( 'Role after expiry - WP user not found for member ID: ' . $member_id . '. Could not restore the level role.', true );
+			return;
+		}
+
+		SwpmLog::log_simple_debug( 'Role after expiry - Restoring the default WP role of the level: ' . $level_row->role . '. Member ID: ' . $member_id, true );
+		self::update_wp_user_role( $wp_user->ID, $level_row->role );
 	}
 
 	//if a username is provided, it will return sanitized email of the user
